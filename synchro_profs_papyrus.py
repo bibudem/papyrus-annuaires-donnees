@@ -88,6 +88,9 @@ CONNEXION_OBLIGATOIRE = {"base_url": "DSPACE_BASE_URL", "user": "DSPACE_USER", "
 # --- Emplacement de dépôt (surchargeable par --community/--collection) ---
 # UUID de la communauté où chercher automatiquement la collection Person.
 COMMUNAUTE_PAR_DEFAUT = os.environ.get("DSPACE_COMMUNITY", "1acd99a0-6ffb-42f8-a261-30b96f3f2405")
+# UUID de la collection Person à utiliser directement (facultatif) : si rempli,
+# la communauté n'est plus consultée. Utile quand elle contient plusieurs collections.
+COLLECTION_PAR_DEFAUT = os.environ.get("DSPACE_COLLECTION") or None
 
 # --- Fichiers d'entrée ---
 # Si un DOSSIER est donné à la place d'un fichier (fichier_txt ou --excel), le
@@ -774,7 +777,8 @@ def analyser_arguments():
     parser.add_argument("--password", help="Mot de passe admin DSpace (défaut : DSPACE_PASSWORD du .env)")
     parser.add_argument("--community", default=COMMUNAUTE_PAR_DEFAUT,
                          help="UUID de la communauté où chercher/créer la collection Person")
-    parser.add_argument("--collection", help="UUID de la collection cible (évite la résolution "
+    parser.add_argument("--collection", default=COLLECTION_PAR_DEFAUT,
+                         help="UUID de la collection cible, défaut : DSPACE_COLLECTION du .env (évite la résolution "
                                               "automatique via --community)")
     parser.add_argument("--apply", action="store_true",
                          help="Applique réellement les changements (sinon, mode simulation)")

@@ -50,10 +50,14 @@ DSPACE_BASE_URL=http://localhost:8080/server/api
 DSPACE_USER=dspace
 DSPACE_PASSWORD=...
 DSPACE_COMMUNITY=1acd99a0-6ffb-42f8-a261-30b96f3f2405
+DSPACE_COLLECTION=
 ```
 
+- `DSPACE_COLLECTION` (facultatif) : l'UUID de la collection Person. Vide,
+  le script la cherche dans la communauté ; s'il en trouve plusieurs, il les
+  affiche et s'arrête — copiez alors l'UUID de la bonne ici.
 - Ne mettez jamais `.env` dans Git (il est déjà exclu par `.gitignore`).
-- Si vous donnez `--base-url`, `--user`, `--password` ou `--community` dans
+- Si vous donnez `--base-url`, `--user`, `--password`, `--community` ou `--collection` dans
   la commande, ces valeurs passent avant celles du `.env`.
 - Avec `--apply`, le script **refuse de démarrer** s'il ne trouve pas
   l'adresse, l'utilisateur et le mot de passe (ni dans `.env`, ni dans la
@@ -161,19 +165,11 @@ choisis. C'est la façon conseillée pour l'exécution automatique.
 | `--apply` | Écrit vraiment dans Papyrus (sans cette option : simulation) |
 | `--limit N` | Ne traite que les N premiers profs, pour tester (les départs ne sont pas vérifiés) |
 | `--ignorer-seuils` | Désactive les garde-fous, ex. pour le premier chargement |
-| `--collection` | À donner seulement si le script trouve plusieurs collections |
 | `--verbose` | Affiche tout le détail à l'écran |
 
-Les autres options servent rarement : `--base-url`, `--user`, `--password`
-et `--community` remplacent les valeurs du `.env`, et `--log-file` change
+Les autres options servent rarement : `--base-url`, `--user`, `--password`,
+`--community` et `--collection` remplacent les valeurs du `.env`, et `--log-file` change
 l'endroit du journal. `python synchro_profs_papyrus.py --help` les liste toutes.
-
-### La collection
-
-Le script cherche tout seul la collection dans la communauté. S'il en trouve
-**plusieurs**, il les affiche et s'arrête : relancez avec
-`--collection <uuid>` pour dire laquelle utiliser. C'est voulu, pour ne
-jamais écrire dans la mauvaise collection.
 
 ### Les départs (`UdeM.statut`)
 
