@@ -23,12 +23,23 @@ pip install requests openpyxl python-dotenv
 (`python-dotenv` est optionnel — seulement nécessaire pour le chargement
 automatique du fichier `.env`, voir ci-dessous.)
 
-Les deux scripts doivent être dans le **même dossier** (`synchro_profs_papyrus.py`
-importe des fonctions de `extraire_professeurs.py`).
+Structure attendue (`synchro_profs_papyrus.py` importe des fonctions de
+`outils/extraire_professeurs.py`) :
+
+```
+papyrus-liste-prof/
+├── synchro_profs_papyrus.py
+├── outils/
+│   └── extraire_professeurs.py
+├── data/          # fichiers d'entrée (liste_personnel .txt, ORCID .xlsx)
+└── logs/          # journaux générés (créé automatiquement)
+```
+
+Toutes les commandes ci-dessous se lancent depuis la racine `papyrus-liste-prof/`.
 
 ### Configuration sensible (`.env`)
 
-Les identifiants et l'URL DSpace peuvent être mis dans un fichier `.env`
+Les identifiants et l'URL Papyrus peuvent être mis dans un fichier `.env`
 plutôt que tapés en ligne de commande (évite qu'ils traînent dans
 l'historique shell ou la liste des processus) :
 
@@ -61,18 +72,22 @@ l'ORCID si un fichier Excel est fourni.
 
 ```bash
 # Tableau simple
-python extraire_professeurs.py liste_personnel.txt
+python outils/extraire_professeurs.py liste_personnel.txt
 
 # Avec ORCID (croisé par courriel)
-python extraire_professeurs.py liste_personnel.txt --excel annuaire.xlsx
+python outils/extraire_professeurs.py liste_personnel.txt --excel annuaire.xlsx
 
 # Écrit aussi un fichier CSV (utile pour Excel, évite les problèmes d'affichage)
-python extraire_professeurs.py liste_personnel.txt --excel annuaire.xlsx --csv resultat.csv
+python outils/extraire_professeurs.py liste_personnel.txt --excel annuaire.xlsx --csv resultat.csv
 
 # Mode diagnostic : affiche les champs extraits + une règle de positions,
 # pour valider/ajuster le format si jamais la structure du fichier change
-python extraire_professeurs.py liste_personnel.txt --diagnostic
+python outils/extraire_professeurs.py liste_personnel.txt --diagnostic
 ```
+
+> `--diagnostic` et `--csv` n'existent **que** dans `extraire_professeurs.py`.
+> Les passer à `synchro_profs_papyrus.py` donne
+> `error: unrecognized arguments: --diagnostic`.
 
 ### Fichier Excel attendu
 
@@ -125,9 +140,12 @@ python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --appl
 
 # 3. Une fois validé, sur la liste complète
 python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --apply
+
+# Exemple avec les fichiers réels de data/
+python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx
 ```
 
-⚠️ **Par défaut, rien n'est écrit dans DSpace** tant que `--apply` n'est pas
+⚠️ **Par défaut, rien n'est écrit dans Papyrus** tant que `--apply` n'est pas
 précisé. Toujours tester avec `--limit` avant un run complet.
 
 ### Options principales
@@ -141,7 +159,7 @@ précisé. Toujours tester avec `--limit` avant un run complet.
 | `--user` / `--password` | `dspace` / `dspace` | Identifiants admin |
 | `--community` | UUID configuré | Communauté où chercher la collection Person |
 | `--collection` | *(auto)* | UUID de la collection cible (court-circuite `--community`) |
-| `--log-file` | horodaté | Chemin du fichier `.log` |
+| `--log-file` | `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Chemin du fichier `.log` |
 | `--verbose` | désactivé | Affiche le détail ligne par ligne en console |
 
 ### Résolution de la collection
@@ -174,7 +192,7 @@ fenêtre où il semble à tort marqué `Inactif`.
 
 ### Journalisation
 
-Chaque run écrit un fichier `synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` (ou
+Chaque run écrit un fichier `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` (ou
 le chemin donné via `--log-file`) qui garde **tout le détail** (créations,
 mises à jour, liaisons, avertissements) — utile pour auditer après coup un
 run de plusieurs milliers d'entrées. La console, elle, reste compacte par
