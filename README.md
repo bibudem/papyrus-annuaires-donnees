@@ -194,74 +194,26 @@ run a été arrêté avant la fin.
 
 ---
 
-## Les garde-fous
+## Sécurités, journal et points à connaître
 
-Le script est fait pour tourner seul, par exemple chaque nuit. Pour qu'un
-mauvais fichier ou une panne ne fasse pas de dégâts, il s'arrête de
-lui-même dans ces cas :
+Le script peut tourner seul (par exemple chaque nuit). Il s'arrête de lui-même dans ces cas :
 
-| Situation | Ce que fait le script | Cause probable |
-|---|---|---|
-| Moins de **1500 profs** dans le fichier | S'arrête avant d'écrire quoi que ce soit | Fichier vide, coupé ou au mauvais format |
-| Plus de **100 créations** dans le même run | S'arrête après la 100ᵉ | L'index de recherche de Papyrus est vide ou en reconstruction : les profs existants ne sont pas retrouvés, le script créerait des doublons |
-| Plus de **5 %** de la collection à passer `Inactif` d'un coup | Ne marque personne `Inactif` | Fichier incomplet |
-| **50 erreurs de suite** | Abandonne le run | Papyrus est en panne |
-| Une autre synchronisation `--apply` tourne déjà | Ne démarre pas | Le run précédent n'est pas fini |
-| Papyrus ne répond plus | N'attend jamais une réponse plus de 2 minutes (au lieu d'attendre sans fin) | Serveur bloqué |
+| Situation | Ce que fait le script |
+|---|---|
+| Moins de **1500 profs** dans le fichier (fichier vide ou coupé) | S'arrête sans rien écrire |
+| Plus de **100 créations** dans le même run (index de recherche vide, risque de doublons) | S'arrête après la 100ᵉ |
+| Plus de **5 %** de la collection à passer `Inactif` d'un coup (fichier incomplet) | Ne marque personne `Inactif` |
+| **50 erreurs de suite** (Papyrus en panne) | Abandonne le run |
+| Une autre synchronisation `--apply` tourne déjà | Ne démarre pas |
+| Papyrus ne répond plus | N'attend jamais plus de 2 minutes |
 
-Les trois premiers peuvent être désactivés avec `--ignorer-seuils`. C'est
-nécessaire pour le **tout premier chargement** (plus de 100 fiches à
-créer) ou pour un test sur un petit fichier. Les chiffres se changent en
-haut de `synchro_profs_papyrus.py` (`MIN_PROFESSEURS_ATTENDUS`,
-`SEUIL_MAX_CREATIONS`, `SEUIL_MAX_DEPARTS_POURCENT`,
-`MAX_ERREURS_CONSECUTIVES`).
-
-Autres protections :
-
-- si la connexion expire en cours de route, le script se reconnecte tout seul ;
-- une lecture qui échoue est réessayée deux fois (après 2 s, puis 4 s). Une
-  écriture, elle, n'est pas réessayée si on ne sait pas si elle a été faite,
-  pour ne pas risquer de doublon : le run suivant s'en chargera ;
-- un fichier liste_personnel de plus de **2 jours** ou un fichier ORCID de
-  plus de **30 jours** donne un avertissement (export pas reçu ?). Le run se
-  fait quand même, mais finit avec le code 2.
-
-## Le journal
-
-Chaque exécution écrit un fichier dans `logs/`
-(`liste_profs_papyrus_AAAAMMJJ_HHMMSS.log`) avec **tout le détail** :
-fiches créées, modifiées, liens ajoutés ou retirés, avertissements et
-erreurs (avec leur cause). À l'écran, on ne voit que l'avancement et le
-résumé :
-
-```
-2034 professeur(s) | collection 9317ddbc-... | mode APPLICATION RÉELLE
-
-100/2034 (5%) — 2c 15m 83i 0e — ~30 min restantes
-...
-Résumé : 20 créé(s), 150 mis à jour, 1860 inchangé(s), 4 erreur(s)
-  12 prof(s) absent(s) de la liste_personnel marqué(s) Inactif (présents dans DSpace mais plus dans le fichier)
-  3 lien(s) vers une ancienne OrgUnit retiré(s) (changement d'unité)
-  2 CodeUnite sans OrgUnit correspondant dans DSpace.
-```
-
-`c` / `m` / `i` / `e` = créés / mis à jour / inchangés / erreurs. En
-simulation, le résumé dit « à marquer » ou « à retirer » au lieu de
-« marqué(s) » ou « retiré(s) ».
-
-Ajoutez `--verbose` pour voir tout le détail à l'écran pendant que le
-script tourne.
-
-## À savoir
-
-- **Double affiliation** : quand un prof change d'unité, le script retire
-  son lien vers l'ancienne unité. Il retirerait aussi un lien vers une
-  deuxième unité ajouté à la main. Si ça vous pose problème, mettez
-  `RETIRER_ANCIENNES_UNITES = False` en haut de `synchro_profs_papyrus.py` :
-  le script ne retirera plus jamais de lien.
-- **Erreur 500 sur `/core/relationships`** : Papyrus ne renvoie pas le
-  détail de l'erreur. Il faut regarder le `dspace.log` sur le serveur, à
-  l'heure de l'erreur (attention, ce journal est en heure UTC).
+- `--ignorer-seuils` désactive les trois premières règles. C'est nécessaire pour le **premier chargement** ou pour un test sur un petit fichier. Les chiffres se changent en haut de `synchro_profs_papyrus.py`.
+- Si la connexion expire, le script se reconnecte tout seul. Une lecture qui échoue est réessayée deux fois ; une écriture douteuse ne l'est pas (pas de doublon), c'est le run suivant qui la refera.
+- Un fichier liste_personnel de plus de **2 jours** ou un fichier ORCID de plus de **30 jours** donne un avertissement.
+- **Journal** : chaque exécution écrit tout le détail dans `logs/` (fiches créées ou modifiées, liens, erreurs). À l'écran, on ne voit que l'avancement et le résumé ; ajoutez `--verbose` pour tout voir. Dans l'avancement, `c` / `m` / `i` / `e` = créés / mis à jour / inchangés / erreurs.
+- **Codes de sortie** : `0` tout va bien · `1` rien n'a été fait ou run abandonné · `2` terminé, mais à vérifier dans le journal · `3` une autre synchronisation tournait déjà.
+- **Double affiliation** : quand un prof change d'unité, le lien vers l'ancienne est retiré, y compris un lien ajouté à la main. Pour l'éviter, mettez `RETIRER_ANCIENNES_UNITES = False`.
+- **Erreur 500 sur `/core/relationships`** : regardez le `dspace.log` sur le serveur, à l'heure de l'erreur (attention, il est en heure UTC).
 
 ---
 
