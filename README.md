@@ -23,7 +23,7 @@ pip install requests openpyxl python-dotenv
 Organisation des fichiers :
 
 ```
-papyrus-liste-prof/
+papyrus-annuaires-donnees/
 ├── synchro_profs_papyrus.py
 ├── .env.example   # modèle pour créer votre .env
 ├── outils/
