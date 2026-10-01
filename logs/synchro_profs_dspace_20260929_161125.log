@@ -1,8 +1,0 @@
-2026-09-29 16:11:25  Journal détaillé écrit dans : logs\synchro_profs_dspace_20260929_161125.log
-2026-09-29 16:11:27  Type de relation 'isOrgUnitOfPerson' résolu : id=5, gauche=Person, droite=OrgUnit
-2026-09-29 16:11:27  3 professeur(s), limité à 3 | collection 9317ddbc-685b-42fc-9801-284c1a5a0419 | mode APPLICATION RÉELLE
-
-2026-09-29 16:11:27  3/3 (100%) — 0c 0m 3i 0e — ~0 min restantes
-2026-09-29 16:11:30  
-Résumé : 0 créé(s), 0 mis à jour, 3 inchangé(s), 0 erreur(s)
-2026-09-29 16:11:30    3 liaison(s) OrgUnit échouée(s) (probablement déjà liées)

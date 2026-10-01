@@ -1,2 +1,0 @@
-2026-09-29 16:05:26  Journal détaillé écrit dans : logs\synchro_profs_dspace_20260929_160526.log
-2026-09-29 16:05:27  Erreur de connexion à DSpace : Échec de connexion DSpace (401) : {"timestamp":"2026-09-29T20:05:27.351+00:00","status":401,"error":"Unauthorized","message":"Authentication failed!","path":"/server/api/authn/login"}

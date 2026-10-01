@@ -1,9 +1,8 @@
 # Logs générés par synchro_profs_dspace.py
-/logd/*.log
+/logs/*
 
 # Fichiers de données sensibles (RH, ORCID) — ne jamais committer
-data/*.xlsx
-data/*.txt
+data/*
 
 
 # Identifiants / configuration sensible (voir .env.example pour le modèle)

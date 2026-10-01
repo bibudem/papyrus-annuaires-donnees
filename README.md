@@ -2,7 +2,7 @@
 
 Pipeline en deux étapes pour extraire les professeurs du fichier liste_personnel
 (export RH à largeur fixe), croiser leur ORCID via un fichier Excel, puis
-les synchroniser dans un dépôt DSpace 7 (création/mise à jour, liaison à
+les synchroniser dans Papyrus (création/mise à jour, liaison à
 leur OrgUnit, et suivi des départs).
 
 ```
@@ -99,7 +99,7 @@ C'est le seul endroit à modifier si le format du fichier liste_personnel change
 ## 2. `synchro_profs_dspace.py`
 
 Prend la liste de professeurs (même logique d'extraction que ci-dessus) et
-la synchronise dans DSpace 7 via l'API REST :
+la synchronise dans Papyrus via l'API REST :
 
 - **Crée** un item Person s'il n'existe pas déjà (recherché par courriel),
   avec `UdeM.statut = Actif`.
@@ -252,7 +252,7 @@ de l'erreur. Voir aussi la piste « liaison déjà existante » dans le résumé
 du script.
 
 **`Impossible de vérifier les départs : 404 ... /core/collections/{uuid}/items`**
-→ Cet endpoint n'existe pas dans l'API REST DSpace 7 ; le script liste les
+→ Cet endpoint n'existe pas dans l'API REST de Papyrus ; le script liste les
 items d'une collection via l'API Discovery (`scope=<uuid>`) à la place. Si
 l'erreur revient malgré tout, vérifier que la collection existe bien et que
 le compte utilisé a les droits de lecture dessus.
