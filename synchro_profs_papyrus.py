@@ -458,7 +458,42 @@ class DSpaceClient:
                 "nom_type": ((type_relation.get("leftwardType"), type_relation.get("rightwardType"))
                              if type_relation else None),
             })
+
+        # Source de secours, plus fiable : les métadonnées virtuelles de l'item
+        # (ex. relation.isOrgUnitOfPerson), générées par DSpace pour chaque
+        # relation — valeur = UUID de l'OrgUnit, autorité = "virtual::<id relation>".
+        # L'API /relationships n'inclut pas toujours les items liés (selon la
+        # version/config) : sans ça, un lien existant passait inaperçu et sa
+        # recréation échouait en 500.
+        connus = {rel["id"] for rel in resultat}
+        for rel in self._liens_virtuels(item_uuid, NOM_RELATION_ORGUNIT):
+            if rel["id"] in connus:
+                for existant in resultat:
+                    if existant["id"] == rel["id"]:
+                        existant["autre_uuid"] = existant["autre_uuid"] or rel["autre_uuid"]
+                        existant["nom_type"] = existant["nom_type"] or rel["nom_type"]
+            else:
+                resultat.append(rel)
         return resultat
+
+    def _liens_virtuels(self, item_uuid, nom_relation):
+        """Lit les liens 'nom_relation' dans les métadonnées virtuelles
+        relation.<nom_relation> de l'item. Retourne des dicts au même format
+        que lister_relations."""
+        r = self._requete("GET", f"{self.base_url}/core/items/{item_uuid}")
+        r.raise_for_status()
+        liens = []
+        for valeur in r.json().get("metadata", {}).get(f"relation.{nom_relation}", []):
+            autorite = valeur.get("authority") or ""
+            if not autorite.startswith("virtual::"):
+                continue
+            try:
+                relation_id = int(autorite.split("::", 1)[1])
+            except ValueError:
+                continue
+            liens.append({"id": relation_id, "autre_uuid": valeur.get("value"),
+                          "nom_type": (nom_relation,)})
+        return liens
 
     def a_deja_une_relation_avec(self, item_uuid, autre_item_uuid):
         """Vérifie si item_uuid a déjà une relation (peu importe le type) avec
