@@ -141,29 +141,23 @@ python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --appl
 # 3. Une fois validé, sur la liste complète
 python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --apply
 
-# Exemple avec les fichiers réels de data/
-python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx
 ```
 
-⚠️ **Par défaut, rien n'est écrit dans Papyrus** tant que `--apply` n'est pas
+**Par défaut, rien n'est écrit dans Papyrus** tant que `--apply` n'est pas
 précisé. Toujours tester avec `--limit` avant un run complet.
 
 ### Options principales
 
 | Option | Défaut | Description |
 |---|---|---|
-| `fichier_txt` | *(requis, positionnel)* | Fichier liste_personnel (.txt à largeur fixe) |
-| `--excel` | *(requis)* | Fichier Excel des ORCID (colonnes « Courriel » et « ORCID ») |
-| `--apply` | désactivé (simulation) | Applique réellement les changements |
+| `--excel` | *(requis)* | Fichier Excel des ORCID |
+| `--apply` | désactivé | Applique réellement les changements |
 | `--limit N` | tous | Ne traite que les N premiers profs (pour tester) |
-| `--base-url` | `DSPACE_BASE_URL` du `.env`, sinon `http://localhost:8080/server/api` | URL de l'API REST de Papyrus (doit finir par `/server/api`) |
-| `--user` / `--password` | `DSPACE_USER` / `DSPACE_PASSWORD` du `.env`, sinon `dspace` / `dspace` | Identifiants admin |
-| `--community` | `DSPACE_COMMUNITY` du `.env`, sinon UUID codé dans le script | Communauté où chercher la collection Person |
-| `--collection` | *(auto)* | UUID de la collection cible (court-circuite `--community`) |
+
+| `--community` | UUID configuré | Communauté où chercher la collection Person |
+| `--collection` | *(auto)* | UUID de la collection cible |
 | `--log-file` | `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Chemin du fichier `.log` |
 | `--verbose` | désactivé | Affiche le détail ligne par ligne en console |
-
-`python synchro_profs_papyrus.py --help` affiche la liste complète.
 
 ### Résolution de la collection
 
@@ -246,34 +240,3 @@ fiches créées — ce champ n'est pas nécessaire au bon fonctionnement du lien
 Person↔OrgUnit, qui repose uniquement sur l'UUID.
 
 ---
-
-## Dépannage
-
-**`ModuleNotFoundError: No module named 'requests'`**
-→ `pip install requests openpyxl`
-
-**`UnicodeDecodeError` à la lecture du fichier liste_personnel**
-→ Le script essaie déjà UTF-8, cp1252 et latin-1 dans l'ordre ; si aucun ne
-fonctionne, le fichier a un encodage encore différent — le préciser.
-
-**`Échec de connexion Papyrus (405) : Only POST is allowed for login requests`**
-→ Généralement causé par une redirection HTTP suivie automatiquement (et
-convertie en GET). Déjà géré dans le script (`allow_redirects=False` +
-gestion manuelle), mais si l'erreur revient, vérifier que `--base-url`
-pointe bien vers `.../server/api` exactement.
-
-**`Plusieurs collections trouvées`**
-→ Normal si la communauté contient plus d'une collection ; relancer avec
-`--collection <uuid>` (voir la liste affichée).
-
-**Erreur 500 générique sur `/core/relationships`**
-→ La réponse REST ne contient jamais le vrai détail d'un 500 ; regarder le
-`dspace.log` côté serveur (⚠️ en UTC, pas l'heure locale) autour de l'horaire
-de l'erreur. Voir aussi la piste « liaison déjà existante » dans le résumé
-du script.
-
-**`Impossible de vérifier les départs : 404 ... /core/collections/{uuid}/items`**
-→ Cet endpoint n'existe pas dans l'API REST de Papyrus ; le script liste les
-items d'une collection via l'API Discovery (`scope=<uuid>`) à la place. Si
-l'erreur revient malgré tout, vérifier que la collection existe bien et que
-le compte utilisé a les droits de lecture dessus.

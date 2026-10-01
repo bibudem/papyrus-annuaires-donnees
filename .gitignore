@@ -1,4 +1,4 @@
-# Logs générés par synchro_profs_dspace.py
+# Logs générés par synchro_profs_papyrus.py
 /logs/*
 
 # Fichiers de données sensibles (RH, ORCID) — ne jamais committer
