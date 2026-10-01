@@ -152,15 +152,18 @@ précisé. Toujours tester avec `--limit` avant un run complet.
 
 | Option | Défaut | Description |
 |---|---|---|
-| `--excel` | *(requis)* | Fichier Excel des ORCID |
-| `--apply` | désactivé | Applique réellement les changements |
+| `fichier_txt` | *(requis, positionnel)* | Fichier liste_personnel (.txt à largeur fixe) |
+| `--excel` | *(requis)* | Fichier Excel des ORCID (colonnes « Courriel » et « ORCID ») |
+| `--apply` | désactivé (simulation) | Applique réellement les changements |
 | `--limit N` | tous | Ne traite que les N premiers profs (pour tester) |
-| `--base-url` | `http://localhost:8080/server/api` | URL de l'API REST DSpace |
-| `--user` / `--password` | `dspace` / `dspace` | Identifiants admin |
-| `--community` | UUID configuré | Communauté où chercher la collection Person |
+| `--base-url` | `DSPACE_BASE_URL` du `.env`, sinon `http://localhost:8080/server/api` | URL de l'API REST de Papyrus (doit finir par `/server/api`) |
+| `--user` / `--password` | `DSPACE_USER` / `DSPACE_PASSWORD` du `.env`, sinon `dspace` / `dspace` | Identifiants admin |
+| `--community` | `DSPACE_COMMUNITY` du `.env`, sinon UUID codé dans le script | Communauté où chercher la collection Person |
 | `--collection` | *(auto)* | UUID de la collection cible (court-circuite `--community`) |
 | `--log-file` | `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Chemin du fichier `.log` |
 | `--verbose` | désactivé | Affiche le détail ligne par ligne en console |
+
+`python synchro_profs_papyrus.py --help` affiche la liste complète.
 
 ### Résolution de la collection
 
