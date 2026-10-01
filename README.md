@@ -226,26 +226,6 @@ Autres protections :
   plus de **30 jours** donne un avertissement (export pas reçu ?). Le run se
   fait quand même, mais finit avec le code 2.
 
-## Exécution automatique
-
-Exemple de commande à mettre dans le Planificateur de tâches Windows (ou cron) :
-
-```bash
-python C:\chemin\vers\papyrus-liste-prof\liste_profs_papyrus.py C:\chemin\vers\papyrus-liste-prof\data --excel C:\chemin\vers\papyrus-liste-prof\data --apply
-```
-
-Avant de l'activer, faites-le tourner quelques jours **sans `--apply`** et
-lisez les journaux.
-
-Le code de sortie indique au planificateur si tout s'est bien passé :
-
-| Code | Signification |
-|---|---|
-| `0` | Tout s'est bien passé |
-| `1` | Rien n'a été fait, ou le run a été abandonné (connexion impossible, fichier introuvable, fichier trop petit, Papyrus en panne…) |
-| `2` | Le run est allé au bout, mais il y a quelque chose à regarder dans le journal (erreurs sur certains profs, garde-fou déclenché, fichier trop vieux) |
-| `3` | Une autre synchronisation était déjà en cours |
-
 ## Le journal
 
 Chaque exécution écrit un fichier dans `logs/`
