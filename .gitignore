@@ -26,3 +26,6 @@ env/
 Thumbs.db
 *.csv
 
+
+# Verrou de synchronisation (--apply)
+.synchro_profs_papyrus.lock

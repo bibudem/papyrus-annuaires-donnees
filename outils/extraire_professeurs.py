@@ -178,11 +178,13 @@ def trouver_colonne(entetes, mot_cle, eviter_index=None):
 
 def extraire_premier_orcid(valeur_cellule):
     """Extrait le premier ORCID valide (format 0000-0000-0000-0000) d'une
-    cellule, même si plusieurs y sont collés (ex: '0000-... / 0000-...')."""
+    cellule, même si plusieurs y sont collés (ex: '0000-... / 0000-...').
+    Retourne "" si la cellule ne contient aucun ORCID valide (ex: 'N/A',
+    'à venir') : mieux vaut pas d'ORCID qu'un texte invalide dans Papyrus."""
     if not valeur_cellule:
         return ""
     m = MOTIF_ORCID.search(str(valeur_cellule))
-    return m.group(0) if m else str(valeur_cellule).strip()
+    return m.group(0).upper() if m else ""
 
 
 def charger_orcid_depuis_excel(chemin_excel):
@@ -193,13 +195,15 @@ def charger_orcid_depuis_excel(chemin_excel):
     Si un courriel a plusieurs ORCID distincts, les deux sont conservés (et
     signalés) plutôt que d'écraser l'un des deux en silence — voir main()
     pour la règle qui choisit lequel afficher.
+
+    Lève RuntimeError (plutôt que de quitter) si openpyxl manque ou si les
+    colonnes sont introuvables, pour que l'appelant puisse journaliser l'erreur.
     """
     try:
         from openpyxl import load_workbook
     except ImportError:
-        print("Erreur : le module 'openpyxl' est requis pour lire le fichier Excel.")
-        print("Installe-le avec : pip install openpyxl")
-        sys.exit(1)
+        raise RuntimeError("le module 'openpyxl' est requis pour lire le fichier Excel "
+                           "(pip install openpyxl).")
 
     lignes = list(load_workbook(chemin_excel, data_only=True).active.iter_rows(values_only=True))
     if not lignes:
@@ -210,20 +214,26 @@ def charger_orcid_depuis_excel(chemin_excel):
     idx_orcid = trouver_colonne(entetes, MOT_CLE_COLONNE_ORCID, eviter_index=idx_courriel)
 
     if idx_courriel is None or idx_orcid is None:
-        print("Erreur : impossible de trouver les colonnes 'Courriel' et/ou 'ORCID'.")
-        print(f"En-têtes trouvées : {list(entetes)}")
-        sys.exit(1)
+        raise RuntimeError(f"impossible de trouver les colonnes 'Courriel' et/ou 'ORCID' dans "
+                           f"'{chemin_excel}'. En-têtes trouvées : {list(entetes)}")
 
     correspondance = {}
+    nb_orcid_invalides = 0
     for ligne in lignes[1:]:
         if idx_courriel >= len(ligne) or idx_orcid >= len(ligne):
             continue
         courriel = normaliser_courriel(ligne[idx_courriel])
         orcid = extraire_premier_orcid(ligne[idx_orcid])
+        if not orcid and str(ligne[idx_orcid] or "").strip():
+            nb_orcid_invalides += 1
         if courriel and orcid:
             liste = correspondance.setdefault(courriel, [])
             if orcid not in liste:
                 liste.append(orcid)
+
+    if nb_orcid_invalides:
+        print(f"⚠ ATTENTION : {nb_orcid_invalides} cellule(s) ORCID non vide(s) mais sans ORCID "
+              f"valide (format 0000-0000-0000-000X) — ignorée(s).")
 
     doublons = {c: o for c, o in correspondance.items() if len(o) > 1}
     if doublons:
@@ -342,6 +352,9 @@ def main():
             orcid_par_courriel = charger_orcid_depuis_excel(args.excel)
         except FileNotFoundError:
             print(f"Erreur : le fichier Excel '{args.excel}' est introuvable.")
+            sys.exit(1)
+        except RuntimeError as e:
+            print(f"Erreur : {e}")
             sys.exit(1)
 
         entetes.append(ENTETE_ORCID)

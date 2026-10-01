@@ -1,9 +1,9 @@
 # Synchronisation Profs → Papyrus
 
-Pipeline en deux étapes pour extraire les professeurs du fichier liste_personnel
-(fichier à largeur fixe), croiser leur ORCID via un fichier Excel, puis
-les synchroniser dans Papyrus (création/mise à jour, liaison à
-leur OrgUnit, et suivi des départs).
+Ces scripts prennent la liste des professeurs du fichier liste_personnel,
+y ajoutent leur ORCID à partir d'un fichier Excel, puis mettent Papyrus à
+jour : ils créent les fiches qui manquent, corrigent celles qui ont changé,
+relient chaque prof à son unité et repèrent ceux qui sont partis.
 
 ```
 fichier liste_personnel (.txt)  ┐
@@ -14,38 +14,35 @@ fichier ORCID (.xlsx)           ┘
                                  synchro_profs_papyrus.py ─▶ Papyrus (API REST DSpace)
 ```
 
-## Prérequis
+## Installation
 
 ```bash
 pip install requests openpyxl python-dotenv
 ```
 
-(`python-dotenv` est optionnel — seulement nécessaire pour le chargement
-automatique du fichier `.env`, voir ci-dessous.)
-
-Structure attendue (`synchro_profs_papyrus.py` importe des fonctions de
-`outils/extraire_professeurs.py`) :
+Organisation des fichiers :
 
 ```
 papyrus-liste-prof/
 ├── synchro_profs_papyrus.py
+├── .env.example   # modèle pour créer votre .env
 ├── outils/
 │   └── extraire_professeurs.py
-├── data/          # fichiers d'entrée (liste_personnel .txt, ORCID .xlsx)
-└── logs/          # journaux générés (créé automatiquement)
+├── data/          # fichiers reçus (liste_personnel .txt, ORCID .xlsx)
+└── logs/          # journaux de chaque exécution (créé tout seul)
 ```
 
-Toutes les commandes ci-dessous se lancent depuis la racine `papyrus-liste-prof/`.
+Le script retrouve lui-même ses dossiers (`outils/`, `logs/`, `.env`) : vous
+pouvez le lancer depuis n'importe quel dossier.
 
-### Configuration sensible (`.env`)
+### Le fichier `.env` (identifiants)
 
-Les identifiants et l'URL Papyrus peuvent être mis dans un fichier `.env`
-plutôt que tapés en ligne de commande (évite qu'ils traînent dans
-l'historique shell ou la liste des processus) :
+L'adresse de Papyrus et le compte à utiliser se mettent dans un fichier
+`.env`, pour ne pas avoir à taper le mot de passe dans la commande :
 
 ```bash
 cp .env.example .env
-# puis éditer .env avec les vraies valeurs
+# puis ouvrez .env et mettez les vraies valeurs
 ```
 
 ```
@@ -55,157 +52,237 @@ DSPACE_PASSWORD=...
 DSPACE_COMMUNITY=1acd99a0-6ffb-42f8-a261-30b96f3f2405
 ```
 
-`.env` est dans `.gitignore` — ne jamais le committer. Les options en ligne
-de commande (`--base-url`, `--user`, `--password`, `--community`) restent
-toujours prioritaires si fournies, `.env` ne sert que de valeur par défaut.
+- Ne mettez jamais `.env` dans Git (il est déjà exclu par `.gitignore`).
+- Si vous donnez `--base-url`, `--user`, `--password` ou `--community` dans
+  la commande, ces valeurs passent avant celles du `.env`.
+- Avec `--apply`, le script **refuse de démarrer** s'il ne trouve pas
+  l'adresse, l'utilisateur et le mot de passe (ni dans `.env`, ni dans la
+  commande). Il n'écrit jamais dans Papyrus avec des valeurs par défaut.
 
 ---
 
-## 1. `extraire_professeurs.py`
+## 1. `extraire_professeurs.py` — voir la liste sans rien changer
 
-Lit le fichier liste_personnel (texte à largeur fixe, sans séparateur), garde
-uniquement les lignes dont le titre correspond à un poste de professeur, et
-affiche un tableau **Nom / Prénom / Courriel / CodeUnite / Statut**. Ajoute
-l'ORCID si un fichier Excel est fourni.
+Ce script lit le fichier liste_personnel, garde seulement les professeurs et
+affiche un tableau **Nom / Prénom / Courriel / CodeUnite / Statut**. Si vous
+donnez le fichier Excel, il ajoute la colonne ORCID. Il ne touche jamais à
+Papyrus.
 
-### Usage
+> **Statut**, ici, c'est le titre du poste (ex. « Professeur(e) titulaire »).
+> Dans Papyrus, il va dans `person.jobTitle`. Ce n'est pas la même chose que
+> `UdeM.statut` (`Actif` / `Inactif`), expliqué plus bas.
 
 ```bash
-# Tableau simple
-python outils/extraire_professeurs.py liste_personnel.txt
+# Le tableau
+python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt
 
-# Avec ORCID (croisé par courriel)
-python outils/extraire_professeurs.py liste_personnel.txt --excel annuaire.xlsx
+# Avec les ORCID
+python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx
 
-# Écrit aussi un fichier CSV (utile pour Excel, évite les problèmes d'affichage)
-python outils/extraire_professeurs.py liste_personnel.txt --excel annuaire.xlsx --csv resultat.csv
+# En plus, enregistrer le résultat dans un fichier CSV (pratique pour Excel)
+python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx --csv resultat.csv
 
-# Mode diagnostic : affiche les champs extraits + une règle de positions,
-# pour valider/ajuster le format si jamais la structure du fichier change
-python outils/extraire_professeurs.py liste_personnel.txt --diagnostic
+# Vérifier que le fichier est bien lu (utile si son format change)
+python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt --diagnostic
 ```
 
-> `--diagnostic` et `--csv` n'existent **que** dans `extraire_professeurs.py`.
-> Les passer à `synchro_profs_papyrus.py` donne
-> `error: unrecognized arguments: --diagnostic`.
+`--csv` et `--diagnostic` existent seulement dans ce script, pas dans
+`synchro_profs_papyrus.py`.
 
-### Fichier Excel attendu
+### Le fichier Excel
 
-Une colonne dont l'en-tête contient « Courriel » et une autre contenant
-« ORCID » (trouvées par mot-clé, peu importe leur position/lettre de
-colonne). Si un courriel a plusieurs ORCID différents dans le fichier
-(erreur de saisie), le script avertit et garde le premier trouvé.
+Il lui faut une colonne dont le titre contient « Courriel » et une autre dont
+le titre contient « ORCID », peu importe où elles sont placées.
 
-**Seul l'ORCID est effectivement récupéré.** La colonne Courriel ne sert
-que de clé de correspondance avec le fichier liste_personnel (le courriel
-affiché dans le tableau final vient du fichier liste_personnel, pas de
-l'Excel). Les autres colonnes du fichier Excel (Fonction, DescUnite, etc.)
-sont ignorées, même si elles sont présentes.
+- Le courriel sert seulement à retrouver le bon prof. On ne prend que l'ORCID ;
+  les autres colonnes sont ignorées.
+- Une cellule qui ne contient pas un vrai ORCID (ex. « N/A », « à venir »)
+  est ignorée, et le script indique combien il en a trouvé.
+- Si un même courriel a plusieurs ORCID différents, le script vous prévient
+  et garde le premier.
 
-### Ce qui est configurable
+### Si le format du fichier change
 
-Tout en haut du fichier, section `CONFIGURATION` : positions des champs
-(`CHAMP_NOM_PRENOM`, `ZONE_COURRIEL`), liste des titres reconnus comme
-« professeur » (`TITRES_PROFESSEUR`), mots-clés des colonnes Excel, etc.
-C'est le seul endroit à modifier si le format du fichier liste_personnel change.
+Tout se règle en haut du fichier, dans la section `CONFIGURATION` : position
+des champs (`CHAMP_NOM_PRENOM`, `ZONE_COURRIEL`), liste des titres qui
+comptent comme « professeur » (`TITRES_PROFESSEUR`), noms des colonnes Excel.
 
 ---
 
-## 2. `synchro_profs_papyrus.py`
+## 2. `synchro_profs_papyrus.py` — mettre Papyrus à jour
 
-Prend la liste de professeurs (même logique d'extraction que ci-dessus) et
-la synchronise dans Papyrus via l'API REST :
+Pour chaque prof de la liste, le script :
 
-- **Crée** un item Person s'il n'existe pas déjà (recherché par courriel),
-  avec `UdeM.statut = Actif`.
-- **Met à jour** les champs qui ont changé sur un item existant (rien n'est
-  réécrit inutilement).
-- **Lie** chaque prof à son OrgUnit (trouvé via son CodeUnite) par une vraie
-  relation DSpace (`/core/relationships`) — pas une métadonnée bricolée.
-- **Marque les départs** : tout item Person déjà dans DSpace mais absent du
-  fichier traité est marqué `UdeM.statut = Inactif` — jamais retiré ni
-  supprimé, juste signalé pour révision (voir plus bas).
-- **Idempotent** : relancer le script ne crée jamais de doublons ni ne
-  re-marque inutilement ce qui est déjà à jour, donc une interruption en
-  cours de route n'est jamais dangereuse.
+- **crée** sa fiche Person si elle n'existe pas encore (on cherche par
+  courriel), avec `UdeM.statut = Actif` ;
+- **met à jour** seulement ce qui a changé (nom, prénom, poste, ORCID,
+  CodeUnite, statut). Une case vide dans le fichier n'efface jamais une
+  valeur déjà dans Papyrus ;
+- **le relie à son unité** (OrgUnit, trouvée par son CodeUnite). Si le prof
+  a changé d'unité, le lien vers la nouvelle unité est ajouté, puis celui
+  vers l'ancienne est retiré ;
+- **repère les départs** : à la fin, toute fiche de Papyrus qui n'est plus
+  dans la liste passe à `UdeM.statut = Inactif`.
 
-### Usage
+Vous pouvez relancer le script autant de fois que vous voulez : il ne crée
+pas de doublons et ne refait pas ce qui est déjà à jour. Si un run est coupé
+en plein milieu, il suffit de le relancer.
+
+### Comment le lancer
 
 ```bash
-# 1. Mode simulation (RIEN n'est écrit) : montre ce qui serait fait
-python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx
+# 1. Simulation : montre ce qui serait fait, sans RIEN écrire
+python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx
 
-# 2. Petit test réel sur 5 profs seulement
-python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --apply --limit 5
+# 2. Petit essai réel sur 5 profs
+python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx --apply --limit 5
 
-# 3. Une fois validé, sur la liste complète
-python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --apply
+# 3. Toute la liste
+python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx --apply
 
+# Même chose, mais en laissant le script choisir les fichiers les plus récents de data/
+python synchro_profs_papyrus.py data --excel data --apply
 ```
 
-**Par défaut, rien n'est écrit dans Papyrus** tant que `--apply` n'est pas
-précisé. Toujours tester avec `--limit` avant un run complet.
+**Sans `--apply`, rien n'est écrit dans Papyrus.** Faites toujours une
+simulation avant.
 
-### Options principales
+**Donner un dossier au lieu d'un fichier** : le script prend le
+`synchro_PERSONNEL_*.txt` et le `SynchroORCID_*.xlsx` les plus récents
+(d'après la date dans leur nom) et écrit dans le journal lesquels il a
+choisis. C'est la façon conseillée pour l'exécution automatique.
 
-| Option | Défaut | Description |
+### Options
+
+| Option | Par défaut | À quoi ça sert |
 |---|---|---|
-| `--excel` | *(requis)* | Fichier Excel des ORCID |
-| `--apply` | désactivé | Applique réellement les changements |
-| `--limit N` | tous | Ne traite que les N premiers profs (pour tester) |
+| `fichier_txt` | *(obligatoire)* | Le fichier liste_personnel, ou un dossier (le plus récent est choisi) |
+| `--excel` | *(obligatoire)* | Le fichier Excel des ORCID, ou un dossier (le plus récent est choisi) |
+| `--apply` | non (simulation) | Écrit vraiment dans Papyrus |
+| `--limit N` | tous | Ne traite que les N premiers profs, pour tester. Les départs ne sont alors **pas** vérifiés |
+| `--ignorer-seuils` | non | Désactive les garde-fous (voir plus bas), ex. pour le tout premier chargement |
+| `--base-url` | valeur du `.env` | Adresse de l'API Papyrus (finit par `/server/api`) |
+| `--user` / `--password` | valeurs du `.env` | Compte administrateur |
+| `--community` | valeur du `.env` | Communauté où se trouve la collection Person |
+| `--collection` | trouvée toute seule | Identifiant (UUID) de la collection à utiliser |
+| `--log-file` | `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Où écrire le journal |
+| `--verbose` | non | Affiche tout le détail à l'écran, pas seulement dans le journal |
 
-| `--community` | UUID configuré | Communauté où chercher la collection Person |
-| `--collection` | *(auto)* | UUID de la collection cible |
-| `--log-file` | `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Chemin du fichier `.log` |
-| `--verbose` | désactivé | Affiche le détail ligne par ligne en console |
+`python synchro_profs_papyrus.py --help` affiche la liste complète.
 
-### Résolution de la collection
+### La collection
 
-Le script cherche automatiquement la collection dans la communauté donnée.
-S'il y en a **plusieurs**, il les liste et s'arrête — il faut alors relancer
-avec `--collection <uuid>` pour confirmer explicitement laquelle utiliser
-(volontaire, pour éviter un dépôt dans la mauvaise collection).
+Le script cherche tout seul la collection dans la communauté. S'il en trouve
+**plusieurs**, il les affiche et s'arrête : relancez avec
+`--collection <uuid>` pour dire laquelle utiliser. C'est voulu, pour ne
+jamais écrire dans la mauvaise collection.
 
-### Suivi des départs (`UdeM.statut`)
+### Les départs (`UdeM.statut`)
 
-Après avoir traité tous les profs du fichier, le script parcourt **tous**
-les items Person de la collection cible (via l'API Discovery, `scope` +
-pagination) et compare leur courriel à la liste actuelle :
+Une fois la liste traitée, le script regarde toutes les fiches Person de la
+collection :
 
-- **Présent dans le fichier** → `UdeM.statut = Actif` (déjà fait pendant le
-  traitement normal, création ou mise à jour).
-- **Absent du fichier, mais présent dans Papyrus** → `UdeM.statut = Inactif`.
-  Rien n'est retiré ni supprimé — c'est un signal à réviser manuellement
-  (le prof peut être parti, ou simplement absent de ce run par erreur).
-- **Déjà `Inactif`** → jamais retouché inutilement.
+- le prof est dans le fichier → `Actif` ;
+- le prof n'est plus dans le fichier → `Inactif`. Sa fiche n'est ni retirée
+  ni supprimée : c'est juste un signal à vérifier (il est peut-être parti,
+  ou il manque par erreur dans le fichier) ;
+- déjà `Inactif` → on n'y touche pas.
 
-Cette étape fonctionne aussi en mode simulation (affiche combien **seraient**
-marqués, sans rien écrire).
+Les départs ne sont pas vérifiés quand on utilise `--limit` (la liste est
+incomplète, sinon tous les autres profs passeraient `Inactif`), ni quand le
+run a été arrêté avant la fin.
 
-⚠️ Le script marque volontairement en deux passes séparées (jamais tout le
-monde à `Inactif` d'un coup avant de retraiter la liste) : si le run est
-interrompu en cours de route, aucun prof actif ne se retrouve dans une
-fenêtre où il semble à tort marqué `Inactif`.
+---
 
-### Journalisation
+## Les garde-fous
 
-Chaque run écrit un fichier `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` (ou
-le chemin donné via `--log-file`) qui garde **tout le détail** (créations,
-mises à jour, liaisons, avertissements) — utile pour auditer après coup un
-run de plusieurs milliers d'entrées. La console, elle, reste compacte par
-défaut :
+Le script est fait pour tourner seul, par exemple chaque nuit. Pour qu'un
+mauvais fichier ou une panne ne fasse pas de dégâts, il s'arrête de
+lui-même dans ces cas :
+
+| Situation | Ce que fait le script | Cause probable |
+|---|---|---|
+| Moins de **1500 profs** dans le fichier | S'arrête avant d'écrire quoi que ce soit | Fichier vide, coupé ou au mauvais format |
+| Plus de **100 créations** dans le même run | S'arrête après la 100ᵉ | L'index de recherche de Papyrus est vide ou en reconstruction : les profs existants ne sont pas retrouvés, le script créerait des doublons |
+| Plus de **5 %** de la collection à passer `Inactif` d'un coup | Ne marque personne `Inactif` | Fichier incomplet |
+| **50 erreurs de suite** | Abandonne le run | Papyrus est en panne |
+| Une autre synchronisation `--apply` tourne déjà | Ne démarre pas | Le run précédent n'est pas fini |
+| Papyrus ne répond plus | N'attend jamais une réponse plus de 2 minutes (au lieu d'attendre sans fin) | Serveur bloqué |
+
+Les trois premiers peuvent être désactivés avec `--ignorer-seuils`. C'est
+nécessaire pour le **tout premier chargement** (plus de 100 fiches à
+créer) ou pour un test sur un petit fichier. Les chiffres se changent en
+haut de `synchro_profs_papyrus.py` (`MIN_PROFESSEURS_ATTENDUS`,
+`SEUIL_MAX_CREATIONS`, `SEUIL_MAX_DEPARTS_POURCENT`,
+`MAX_ERREURS_CONSECUTIVES`).
+
+Autres protections :
+
+- si la connexion expire en cours de route, le script se reconnecte tout seul ;
+- une lecture qui échoue est réessayée deux fois (après 2 s, puis 4 s). Une
+  écriture, elle, n'est pas réessayée si on ne sait pas si elle a été faite,
+  pour ne pas risquer de doublon : le run suivant s'en chargera ;
+- un fichier liste_personnel de plus de **2 jours** ou un fichier ORCID de
+  plus de **30 jours** donne un avertissement (export pas reçu ?). Le run se
+  fait quand même, mais finit avec le code 2.
+
+## Exécution automatique
+
+Exemple de commande à mettre dans le Planificateur de tâches Windows (ou cron) :
+
+```bash
+python C:\chemin\vers\papyrus-liste-prof\synchro_profs_papyrus.py C:\chemin\vers\papyrus-liste-prof\data --excel C:\chemin\vers\papyrus-liste-prof\data --apply
+```
+
+Avant de l'activer, faites-le tourner quelques jours **sans `--apply`** et
+lisez les journaux.
+
+Le code de sortie indique au planificateur si tout s'est bien passé :
+
+| Code | Signification |
+|---|---|
+| `0` | Tout s'est bien passé |
+| `1` | Rien n'a été fait, ou le run a été abandonné (connexion impossible, fichier introuvable, fichier trop petit, Papyrus en panne…) |
+| `2` | Le run est allé au bout, mais il y a quelque chose à regarder dans le journal (erreurs sur certains profs, garde-fou déclenché, fichier trop vieux) |
+| `3` | Une autre synchronisation était déjà en cours |
+
+## Le journal
+
+Chaque exécution écrit un fichier dans `logs/`
+(`synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log`) avec **tout le détail** :
+fiches créées, modifiées, liens ajoutés ou retirés, avertissements et
+erreurs (avec leur cause). À l'écran, on ne voit que l'avancement et le
+résumé :
 
 ```
-3000 professeur(s) | collection 9317ddbc-... | mode APPLICATION RÉELLE
+2034 professeur(s) | collection 9317ddbc-... | mode APPLICATION RÉELLE
 
-100/3000 (3%) — 80c 15m 5i 0e — ~45 min restantes
+100/2034 (5%) — 2c 15m 83i 0e — ~30 min restantes
 ...
-Résumé : 2850 créé(s), 120 mis à jour, 25 inchangé(s), 5 erreur(s)
-  12 prof(s) absent(s) de la liste_personnel marqué(s) Inactif (présents dans Papyrus mais plus dans le fichier)
-  3 liaison(s) OrgUnit échouée(s) (probablement déjà liées)
+Résumé : 20 créé(s), 150 mis à jour, 1860 inchangé(s), 4 erreur(s)
+  12 prof(s) absent(s) de la liste_personnel marqué(s) Inactif (présents dans DSpace mais plus dans le fichier)
+  3 lien(s) vers une ancienne OrgUnit retiré(s) (changement d'unité)
+  2 CodeUnite sans OrgUnit correspondant dans DSpace.
 ```
 
-(`c`/`m`/`i`/`e` = créés / mis à jour / inchangés / erreurs)
+`c` / `m` / `i` / `e` = créés / mis à jour / inchangés / erreurs. En
+simulation, le résumé dit « à marquer » ou « à retirer » au lieu de
+« marqué(s) » ou « retiré(s) ».
 
-Ajouter `--verbose` pour retrouver le détail ligne par ligne en direct dans
-la console (par défaut, seul le fichier `.log` le garde).
+Ajoutez `--verbose` pour voir tout le détail à l'écran pendant que le
+script tourne.
+
+## À savoir
+
+- **Double affiliation** : quand un prof change d'unité, le script retire
+  son lien vers l'ancienne unité. Il retirerait aussi un lien vers une
+  deuxième unité ajouté à la main. Si ça vous pose problème, mettez
+  `RETIRER_ANCIENNES_UNITES = False` en haut de `synchro_profs_papyrus.py` :
+  le script ne retirera plus jamais de lien.
+- **Erreur 500 sur `/core/relationships`** : Papyrus ne renvoie pas le
+  détail de l'erreur. Il faut regarder le `dspace.log` sur le serveur, à
+  l'heure de l'erreur (attention, ce journal est en heure UTC).
+
+---
+
+**Auteur :** Natalia Jabinschi
