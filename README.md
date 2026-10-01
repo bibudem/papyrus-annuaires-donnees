@@ -188,26 +188,22 @@ run a été arrêté avant la fin.
 
 ---
 
-## Sécurités, journal et points à connaître
+## Bon à savoir
 
-Le script peut tourner seul (par exemple chaque nuit). Il s'arrête de lui-même dans ces cas :
+Le script peut tourner seul (par exemple chaque nuit). Pour éviter les dégâts, il s'arrête de lui-même si :
 
 | Situation | Ce que fait le script |
 |---|---|
 | Moins de **1500 profs** dans le fichier (fichier vide ou coupé) | S'arrête sans rien écrire |
-| Plus de **100 créations** dans le même run (index de recherche vide, risque de doublons) | S'arrête après la 100ᵉ |
-| Plus de **5 %** de la collection à passer `Inactif` d'un coup (fichier incomplet) | Ne marque personne `Inactif` |
+| Plus de **100 créations** dans le même run (risque de doublons) | S'arrête après la 100ᵉ |
+| Plus de **5 %** de la collection à passer `Inactif` d'un coup | Ne marque personne `Inactif` |
 | **50 erreurs de suite** (Papyrus en panne) | Abandonne le run |
-| Une autre synchronisation `--apply` tourne déjà | Ne démarre pas |
-| Papyrus ne répond plus | N'attend jamais plus de 2 minutes |
 
-- `--ignorer-seuils` désactive les trois premières règles. C'est nécessaire pour le **premier chargement** ou pour un test sur un petit fichier. Les chiffres se changent en haut de `synchro_profs_papyrus.py`.
-- Si la connexion expire, le script se reconnecte tout seul. Une lecture qui échoue est réessayée deux fois ; une écriture douteuse ne l'est pas (pas de doublon), c'est le run suivant qui la refera.
-- Un fichier liste_personnel de plus de **2 jours** ou un fichier ORCID de plus de **30 jours** donne un avertissement.
-- **Journal** : chaque exécution écrit tout le détail dans `logs/` (fiches créées ou modifiées, liens, erreurs). À l'écran, on ne voit que l'avancement et le résumé ; ajoutez `--verbose` pour tout voir. Dans l'avancement, `c` / `m` / `i` / `e` = créés / mis à jour / inchangés / erreurs.
-- **Codes de sortie** : `0` tout va bien · `1` rien n'a été fait ou run abandonné · `2` terminé, mais à vérifier dans le journal · `3` une autre synchronisation tournait déjà.
-- **Double affiliation** : quand un prof change d'unité, le lien vers l'ancienne est retiré, y compris un lien ajouté à la main. Pour l'éviter, mettez `RETIRER_ANCIENNES_UNITES = False`.
-- **Erreur 500 sur `/core/relationships`** : regardez le `dspace.log` sur le serveur, à l'heure de l'erreur (attention, il est en heure UTC).
+- Pour le **premier chargement** ou un test sur un petit fichier, ajoutez `--ignorer-seuils`.
+- Un fichier liste_personnel de plus de **2 jours** ou ORCID de plus de **30 jours** donne un avertissement.
+- **Journal** : tout le détail est dans `logs/` ; `--verbose` l'affiche aussi à l'écran.
+- **Codes de sortie** : `0` OK · `1` run abandonné · `2` terminé, à vérifier dans le journal · `3` une autre synchronisation tournait déjà.
+- **Double affiliation** : quand un prof change d'unité, le lien vers l'ancienne est retiré, même s'il a été ajouté à la main. Pour l'éviter : `RETIRER_ANCIENNES_UNITES = False`.
 
 ---
 
