@@ -109,7 +109,7 @@ comptent comme « professeur » (`TITRES_PROFESSEUR`), noms des colonnes Excel.
 
 ---
 
-## 2. `liste_profs_papyrus.py` — mettre Papyrus à jour
+## 2. `synchro_profs_papyrus.py` — mettre Papyrus à jour
 
 Pour chaque prof de la liste, le script :
 
@@ -132,16 +132,16 @@ en plein milieu, il suffit de le relancer.
 
 ```bash
 # 1. Simulation : montre ce qui serait fait, sans RIEN écrire
-python liste_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx
+python synchro_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx
 
 # 2. Petit essai réel sur 5 profs
-python liste_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply --limit 5
+python synchro_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply --limit 5
 
 # 3. Toute la liste
-python liste_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply
+python synchro_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply
 
 # Même chose, mais en laissant le script choisir les fichiers les plus récents de data/
-python liste_profs_papyrus.py data --excel data --apply
+python synchro_profs_papyrus.py data --excel data --apply
 ```
 
 **Sans `--apply`, rien n'est écrit dans Papyrus.** Faites toujours une
@@ -212,7 +212,7 @@ lui-même dans ces cas :
 Les trois premiers peuvent être désactivés avec `--ignorer-seuils`. C'est
 nécessaire pour le **tout premier chargement** (plus de 100 fiches à
 créer) ou pour un test sur un petit fichier. Les chiffres se changent en
-haut de `liste_profs_papyrus.py` (`MIN_PROFESSEURS_ATTENDUS`,
+haut de `synchro_profs_papyrus.py` (`MIN_PROFESSEURS_ATTENDUS`,
 `SEUIL_MAX_CREATIONS`, `SEUIL_MAX_DEPARTS_POURCENT`,
 `MAX_ERREURS_CONSECUTIVES`).
 
@@ -277,7 +277,7 @@ script tourne.
 - **Double affiliation** : quand un prof change d'unité, le script retire
   son lien vers l'ancienne unité. Il retirerait aussi un lien vers une
   deuxième unité ajouté à la main. Si ça vous pose problème, mettez
-  `RETIRER_ANCIENNES_UNITES = False` en haut de `liste_profs_papyrus.py` :
+  `RETIRER_ANCIENNES_UNITES = False` en haut de `synchro_profs_papyrus.py` :
   le script ne retirera plus jamais de lien.
 - **Erreur 500 sur `/core/relationships`** : Papyrus ne renvoie pas le
   détail de l'erreur. Il faut regarder le `dspace.log` sur le serveur, à
