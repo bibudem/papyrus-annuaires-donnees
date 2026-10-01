@@ -209,34 +209,3 @@ Résumé : 2850 créé(s), 120 mis à jour, 25 inchangé(s), 5 erreur(s)
 
 Ajouter `--verbose` pour retrouver le détail ligne par ligne en direct dans
 la console (par défaut, seul le fichier `.log` le garde).
-
-### Robustesse (gros volumes)
-
-- **Reconnexion automatique** si le jeton d'authentification expire en
-  cours de route (401 → reconnexion → nouvel essai).
-- **Nouvelle tentative avec délai croissant** (2s, 4s, 8s) sur erreur réseau
-  ou erreur serveur transitoire (502/503/504).
-- Un échec de **liaison OrgUnit** n'interrompt jamais la création/mise à
-  jour de la fiche Person — seule une vraie erreur sur la fiche elle-même
-  compte comme erreur.
-
-### Ce qui est configurable
-
-Tout en haut du fichier, section `CONFIGURATION` :
-
-- Identifiants/URL par défaut
-- Noms des champs de métadonnées Papyrus (`CHAMP_NOM`, `CHAMP_ORCID`,
-  `CHAMP_CODEUNITE`, `CHAMP_STATUT`, etc.) — à ajuster si ton schéma de
-  métadonnées diffère
-- `VALEUR_STATUT_ACTIF` / `VALEUR_STATUT_INACTIF` — les deux valeurs
-  utilisées pour `UdeM.statut`
-- `NOM_RELATION_ORGUNIT` — nom du relationshipType Papyrus pour le lien
-  Person↔OrgUnit (résolu dynamiquement via `/core/relationshiptypes`, pas
-  besoin de connaître l'ID ni l'ordre gauche/droite à l'avance)
-- Paramètres réseau (`NB_TENTATIVES_MAX`, `DELAI_BACKOFF_SECONDES`)
-
-**Note** : le script ne définit plus `dc.title` (titre affiché) sur les
-fiches créées — ce champ n'est pas nécessaire au bon fonctionnement du lien
-Person↔OrgUnit, qui repose uniquement sur l'UUID.
-
----
