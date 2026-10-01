@@ -41,7 +41,7 @@ ZONE_COURRIEL = (166, 320)
 # --- Titres considérés comme "Professeur" ---
 # Tirés du filtre Synchro sur la colonne "Fonction". Inclut les formes
 # abrégées ("Prof ...") qui ne contiennent pas le mot complet "professeur".
-# Pour ajouter/retirer un titre : modifier cette liste seulement.
+# Pour ajouter/retirer un titre : modifier cette liste seulement: "Professeur invité",
 TITRES_PROFESSEUR = [
     "Prof agrégé(e) PTG SC Acad.",
     "Prof agrégé(e) PTG SC Recherc.",
@@ -49,7 +49,6 @@ TITRES_PROFESSEUR = [
     "Prof. sous octroi titulaire",
     "Professeur associé",
     "Professeur form. prat. titulai",
-    "Professeur invité",
     "Professeur sous octroi adjoint",
     "Professeur(e) adjoint(e)",
     "Professeur(e) agrégé(e)",

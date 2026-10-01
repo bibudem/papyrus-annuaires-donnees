@@ -140,6 +140,9 @@ VALEUR_TYPE_ENTITE_ORGUNIT = "OrgUnit"
 # à la main vers une autre unité (ex. double affiliation) — mettre False pour
 # ne jamais retirer de lien.
 RETIRER_ANCIENNES_UNITES = True
+# Prof absent de la liste (fiche Inactif) : retirer aussi ses liens vers une
+# OrgUnit. Les fiches déjà Inactif qui ont encore un lien sont nettoyées aussi.
+RETIRER_UNITE_SI_INACTIF = True
 
 # --- Authentification DSpace (protocole JWT + double cookie CSRF) ---
 COOKIE_CSRF = "DSPACE-XSRF-COOKIE"
@@ -653,21 +656,34 @@ def lier_orgunit(client, person_uuid, orgunit_uuid, appliquer):
     return "lie", retirer_anciennes_unites(client, person_uuid, orgunit_uuid, relations, appliquer)
 
 
+def retirer_liens_orgunit(client, person_uuid, appliquer):
+    """Retire tous les liens NOM_RELATION_ORGUNIT d'une fiche Person (seules
+    les relations dont le type est connu avec certitude sont touchées).
+    Retourne le nombre de liens retirés (ou qui le seraient, en simulation)."""
+    liens = [rel for rel in client.lister_relations(person_uuid)
+             if rel["nom_type"] and NOM_RELATION_ORGUNIT in rel["nom_type"] and rel["id"] is not None]
+    for rel in liens:
+        LOG.debug(f"  ↳ retrait du lien vers l'OrgUnit {rel['autre_uuid']} (relation {rel['id']})")
+        if appliquer:
+            client.supprimer_relation(rel["id"])
+    return len(liens)
+
+
 def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignorer_seuils=False):
-    """Parcourt tous les items Person de la collection et marque
-    CHAMP_STATUT='Inactif' sur ceux dont le courriel n'est PAS dans
-    courriels_actifs (= absent de la liste_personnel actuelle). Ne touche
-    jamais aux items déjà marqués Inactif, et ne retire/supprime jamais
-    rien — juste une métadonnée, à réviser manuellement au besoin.
+    """Parcourt tous les items Person de la collection et, pour ceux dont le
+    courriel n'est PAS dans courriels_actifs (= absents de la liste_personnel
+    actuelle) : marque CHAMP_STATUT='Inactif' et, si RETIRER_UNITE_SI_INACTIF,
+    retire leurs liens OrgUnit. La fiche elle-même n'est jamais supprimée.
 
     Garde-fou : si plus de SEUIL_MAX_DEPARTS_POURCENT % de la collection
-    devrait passer Inactif d'un coup, rien n'est marqué (fichier d'entrée
+    devrait passer Inactif d'un coup, rien n'est fait (fichier d'entrée
     probablement incomplet), sauf avec ignorer_seuils.
 
-    Retourne (nb_departs, bloque, nb_erreurs) : nb_departs = items marqués
-    (ou qui le seraient, en simulation / si bloqué)."""
+    Retourne (nb_departs, bloque, nb_erreurs, nb_liens_retires) : nb_departs =
+    items nouvellement marqués Inactif (ou qui le seraient, en simulation / si bloqué)."""
     items = client.lister_items_de_la_collection(collection_uuid)
-    a_marquer = []
+    absents = []  # (item, courriel, opération Inactif ou None si déjà Inactif)
+    nb_departs = 0
     for item in items:
         valeurs_courriel = item.get("metadata", {}).get(CHAMP_COURRIEL, [])
         courriel_item = normaliser_courriel(valeurs_courriel[0].get("value")) if valeurs_courriel else ""
@@ -675,29 +691,34 @@ def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignore
             continue  # présent dans la liste actuelle -> déjà traité comme Actif ailleurs
 
         operation = operation_maj_champ(item, CHAMP_STATUT, VALEUR_STATUT_INACTIF)
-        if not operation:
-            continue  # déjà Inactif
+        if operation:
+            nb_departs += 1
+        elif not RETIRER_UNITE_SI_INACTIF:
+            continue  # déjà Inactif, rien d'autre à faire
+        absents.append((item, courriel_item, operation))
 
-        a_marquer.append((item, courriel_item, operation))
-
-    pourcentage = 100 * len(a_marquer) / len(items) if items else 0
+    pourcentage = 100 * nb_departs / len(items) if items else 0
     if pourcentage > SEUIL_MAX_DEPARTS_POURCENT and not ignorer_seuils:
-        LOG.error(f"GARDE-FOU : {len(a_marquer)} départ(s) détecté(s) sur {len(items)} item(s) "
+        LOG.error(f"GARDE-FOU : {nb_departs} départ(s) détecté(s) sur {len(items)} item(s) "
                    f"({pourcentage:.0f}% > {SEUIL_MAX_DEPARTS_POURCENT}%) — aucun n'est marqué Inactif. "
                    f"Vérifier le fichier d'entrée ; si ces départs sont réels, relancer avec --ignorer-seuils.")
-        return len(a_marquer), True, 0
+        return nb_departs, True, 0, 0
 
     nb_erreurs = 0
-    for item, courriel_item, operation in a_marquer:
-        LOG.debug(f"[INACTIF] <{courriel_item or 'sans courriel'}> ({item.get('uuid')})")
-        if appliquer:
-            try:
-                client.mettre_a_jour_personne(item["uuid"], [operation])
-            except Exception as e:
-                LOG.error(f"[ERREUR] marquage Inactif de <{courriel_item}> : {e}")
-                nb_erreurs += 1
+    nb_liens_retires = 0
+    for item, courriel_item, operation in absents:
+        try:
+            if operation:
+                LOG.debug(f"[INACTIF] <{courriel_item or 'sans courriel'}> ({item.get('uuid')})")
+                if appliquer:
+                    client.mettre_a_jour_personne(item["uuid"], [operation])
+            if RETIRER_UNITE_SI_INACTIF:
+                nb_liens_retires += retirer_liens_orgunit(client, item["uuid"], appliquer)
+        except Exception as e:
+            LOG.error(f"[ERREUR] passage Inactif de <{courriel_item}> : {e}")
+            nb_erreurs += 1
 
-    return len(a_marquer), False, nb_erreurs
+    return nb_departs, False, nb_erreurs, nb_liens_retires
 
 
 # =============================================================================
@@ -987,7 +1008,7 @@ def executer(args):
             arret_erreurs = True
             break
 
-    nb_departs, departs_bloques, erreurs_departs, departs_echoues = 0, False, 0, False
+    nb_departs, departs_bloques, erreurs_departs, departs_echoues, liens_inactifs = 0, False, 0, False, 0
     if arret_creations or arret_erreurs:
         LOG.warning("Marquage des départs sauté (synchronisation interrompue avant la fin).")
     elif args.limit is not None:
@@ -995,7 +1016,7 @@ def executer(args):
     else:
         courriels_actifs = {normaliser_courriel(p[2]) for p in professeurs}
         try:
-            nb_departs, departs_bloques, erreurs_departs = marquer_departs(
+            nb_departs, departs_bloques, erreurs_departs, liens_inactifs = marquer_departs(
                 client, collection_uuid, courriels_actifs, args.apply, args.ignorer_seuils
             )
         except Exception as e:
@@ -1008,6 +1029,9 @@ def executer(args):
         verbe = "marqué(s)" if args.apply else "à marquer"
         LOG.info(f"  {nb_departs} prof(s) absent(s) de la liste_personnel {verbe} Inactif "
                   f"(présents dans DSpace mais plus dans le fichier)")
+    if liens_inactifs:
+        verbe = "retiré(s)" if args.apply else "à retirer"
+        LOG.info(f"  {liens_inactifs} lien(s) OrgUnit {verbe} sur des fiches Inactif")
     if erreurs_departs:
         LOG.info(f"  {erreurs_departs} erreur(s) lors du marquage Inactif")
     if compteurs["liens_echoues"]:

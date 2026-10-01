@@ -132,7 +132,7 @@ Pour chaque prof de la liste, le script :
   a changé d'unité, le lien vers la nouvelle unité est ajouté, puis celui
   vers l'ancienne est retiré ;
 - **repère les départs** : à la fin, toute fiche de Papyrus qui n'est plus
-  dans la liste passe à `UdeM.statut = Inactif`.
+  dans la liste passe à `UdeM.statut = Inactif` et perd son lien vers son unité.
 
 Vous pouvez relancer le script autant de fois que vous voulez : il ne crée
 pas de doublons et ne refait pas ce qui est déjà à jour. Si un run est coupé
@@ -180,10 +180,12 @@ Une fois la liste traitée, le script regarde toutes les fiches Person de la
 collection :
 
 - le prof est dans le fichier → `Actif` ;
-- le prof n'est plus dans le fichier → `Inactif`. Sa fiche n'est ni retirée
-  ni supprimée : c'est juste un signal à vérifier (il est peut-être parti,
-  ou il manque par erreur dans le fichier) ;
-- déjà `Inactif` → on n'y touche pas.
+- le prof n'est plus dans le fichier → `Inactif`, et son lien vers son unité
+  (OrgUnit) est retiré. La fiche elle-même n'est jamais supprimée : c'est un
+  signal à vérifier (il est peut-être parti, ou il manque par erreur dans le
+  fichier). S'il revient dans la liste, il repasse `Actif` et son lien est recréé ;
+- déjà `Inactif` → le statut ne change pas, mais un lien vers une unité qui
+  resterait est retiré.
 
 Les départs ne sont pas vérifiés quand on utilise `--limit` (la liste est
 incomplète, sinon tous les autres profs passeraient `Inactif`), ni quand le
@@ -206,7 +208,7 @@ Le script peut tourner seul (par exemple chaque nuit). Pour éviter les dégâts
 - Un fichier liste_personnel de plus de **2 jours** ou ORCID de plus de **30 jours** donne un avertissement.
 - **Journal** : tout le détail est dans `logs/` ; `--verbose` l'affiche aussi à l'écran.
 - **Codes de sortie** : `0` OK · `1` run abandonné · `2` terminé, à vérifier dans le journal · `3` une autre synchronisation tournait déjà.
-- **Double affiliation** : quand un prof change d'unité, le lien vers l'ancienne est retiré, même s'il a été ajouté à la main. Pour l'éviter : `RETIRER_ANCIENNES_UNITES = False`.
+- **Liens retirés** : quand un prof change d'unité, le lien vers l'ancienne est retiré ; quand il passe `Inactif`, tous ses liens vers une unité sont retirés — même ceux ajoutés à la main. Pour l'éviter : `RETIRER_ANCIENNES_UNITES = False` ou `RETIRER_UNITE_SI_INACTIF = False`.
 
 ---
 
