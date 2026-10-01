@@ -151,6 +151,7 @@ EN_TETE_AUTORISATION = "Authorization"
 
 # --- Recherche d'un item existant ---
 TAILLE_PAGE_RECHERCHE = 10  # nb de résultats examinés pour trouver une correspondance de courriel
+MAX_PAGES_RECHERCHE_ORGUNIT = 20  # pages de 100 résultats parcourues au plus pour trouver une OrgUnit
 
 # --- Codes HTTP considérés comme un succès pour une création/mise à jour ---
 CODES_HTTP_SUCCES = (200, 201)
@@ -239,6 +240,7 @@ class DSpaceClient:
         self.session = requests.Session()
         self._identifiants = None  # (utilisateur, mot_de_passe), mémorisés pour reconnexion auto
         self._cache_orgunits = {}  # code_unite -> (uuid, nom) ou None si introuvable
+        self._filtre_entite_accepte = True  # f.entityType accepté par Discovery (sinon, recherche sans filtre)
         self._type_relation_orgunit = None  # (id, entite_gauche, entite_droite), résolu une fois
 
     def _jeton_csrf(self):
@@ -378,23 +380,37 @@ class DSpaceClient:
         if code_unite in self._cache_orgunits:
             return self._cache_orgunits[code_unite]
 
-        r = self._requete(
-            "GET", f"{self.base_url}/discover/search/objects",
-            params={"query": f'"{code_unite}"', "dsoType": "item", "size": TAILLE_PAGE_RECHERCHE},
-        )
-        r.raise_for_status()
-        objets = (r.json().get("_embedded", {}).get("searchResult", {})
-                  .get("_embedded", {}).get("objects", []))
-
+        # Les fiches Person portent AUSSI le CodeUnite (même champ) : sans filtre,
+        # une unité de 100+ profs voit son OrgUnit noyée parmi les Person dans
+        # les résultats. On filtre donc sur le type d'entité OrgUnit, et on
+        # parcourt toutes les pages au besoin.
         resultat = None
         cible = code_unite.strip()
-        for obj in objets:
-            item = obj.get("_embedded", {}).get("indexableObject", {})
-            metadonnees = item.get("metadata", {})
-            type_entite = metadonnees.get(CHAMP_TYPE_ENTITE, [{}])[0].get("value")
-            valeurs_code = [v.get("value", "").strip() for v in metadonnees.get(CHAMP_CODEUNITE, [])]
-            if type_entite == VALEUR_TYPE_ENTITE_ORGUNIT and cible in valeurs_code:
-                resultat = (item["uuid"], cible)
+        for page in range(MAX_PAGES_RECHERCHE_ORGUNIT):
+            params = {"query": f'"{code_unite}"', "dsoType": "item", "size": 100, "page": page}
+            if self._filtre_entite_accepte:
+                params["f.entityType"] = f"{VALEUR_TYPE_ENTITE_ORGUNIT},equals"
+            r = self._requete("GET", f"{self.base_url}/discover/search/objects", params=params)
+            if r.status_code in (400, 422) and self._filtre_entite_accepte:
+                # Filtre inconnu de cette instance DSpace : on s'en passe (les
+                # pages suivantes compensent) et on ne le redemande plus.
+                LOG.debug(f"Filtre f.entityType refusé ({r.status_code}) : recherche OrgUnit sans filtre.")
+                self._filtre_entite_accepte = False
+                self._cache_orgunits.pop(code_unite, None)
+                return self.chercher_orgunit_par_code(code_unite)
+            r.raise_for_status()
+            resultat_recherche = r.json().get("_embedded", {}).get("searchResult", {})
+
+            for obj in resultat_recherche.get("_embedded", {}).get("objects", []):
+                item = obj.get("_embedded", {}).get("indexableObject", {})
+                metadonnees = item.get("metadata", {})
+                type_entite = metadonnees.get(CHAMP_TYPE_ENTITE, [{}])[0].get("value")
+                valeurs_code = [v.get("value", "").strip() for v in metadonnees.get(CHAMP_CODEUNITE, [])]
+                if type_entite == VALEUR_TYPE_ENTITE_ORGUNIT and cible in valeurs_code:
+                    resultat = (item["uuid"], cible)
+                    break
+
+            if resultat or page + 1 >= resultat_recherche.get("page", {}).get("totalPages", 1):
                 break
 
         self._cache_orgunits[code_unite] = resultat
@@ -704,6 +720,25 @@ def retirer_liens_orgunit(client, person_uuid, appliquer):
     return len(liens)
 
 
+def signaler_doublons(items):
+    """Avertit (sans rien modifier) si plusieurs fiches de la collection ont
+    le même courriel : le script n'en crée pas, mais il peut en exister
+    d'avant (saisie manuelle, ancien import). À fusionner/supprimer à la main."""
+    uuids_par_courriel = {}
+    for item in items:
+        for valeur in item.get("metadata", {}).get(CHAMP_COURRIEL, [])[:1]:
+            courriel = normaliser_courriel(valeur.get("value"))
+            if courriel:
+                uuids_par_courriel.setdefault(courriel, []).append(item.get("uuid"))
+    doublons = {c: u for c, u in uuids_par_courriel.items() if len(u) > 1}
+    if doublons:
+        LOG.warning(f"⚠ {len(doublons)} courriel(s) présent(s) sur plusieurs fiches de la collection "
+                     f"(doublons à fusionner à la main, détail dans le .log)")
+        for courriel, uuids in sorted(doublons.items()):
+            LOG.debug(f"  [DOUBLON] <{courriel}> : {', '.join(uuids)}")
+    return len(doublons)
+
+
 def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignorer_seuils=False):
     """Parcourt tous les items Person de la collection et, pour ceux dont le
     courriel n'est PAS dans courriels_actifs (= absents de la liste_personnel
@@ -717,6 +752,7 @@ def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignore
     Retourne (nb_departs, bloque, nb_erreurs, nb_liens_retires) : nb_departs =
     items nouvellement marqués Inactif (ou qui le seraient, en simulation / si bloqué)."""
     items = client.lister_items_de_la_collection(collection_uuid)
+    signaler_doublons(items)
     absents = []  # (item, courriel, opération Inactif ou None si déjà Inactif)
     nb_departs = 0
     for item in items:
@@ -1075,7 +1111,9 @@ def executer(args):
         verbe = "retiré(s)" if args.apply else "à retirer"
         LOG.info(f"  {compteurs['unites_retirees']} lien(s) vers une ancienne OrgUnit {verbe} (changement d'unité)")
     if compteurs["orgunit_introuvable"]:
-        LOG.info(f"  {compteurs['orgunit_introuvable']} CodeUnite sans OrgUnit correspondant dans DSpace.")
+        codes = sorted(code for code, trouve in client._cache_orgunits.items() if trouve is None)
+        LOG.info(f"  {compteurs['orgunit_introuvable']} prof(s) non relié(s) à une unité : aucune OrgUnit "
+                  f"dans DSpace pour {len(codes)} CodeUnite ({', '.join(codes)})")
     if not args.apply:
         if compteurs["cree"] >= SEUIL_MAX_CREATIONS and not args.ignorer_seuils:
             LOG.warning(f"  ⚠ {compteurs['cree']} création(s) prévue(s) : en mode --apply, le garde-fou "
