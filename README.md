@@ -1,7 +1,7 @@
 # Synchronisation Profs → Papyrus
 
 Pipeline en deux étapes pour extraire les professeurs du fichier liste_personnel
-(export RH à largeur fixe), croiser leur ORCID via un fichier Excel, puis
+(fichier à largeur fixe), croiser leur ORCID via un fichier Excel, puis
 les synchroniser dans Papyrus (création/mise à jour, liaison à
 leur OrgUnit, et suivi des départs).
 
