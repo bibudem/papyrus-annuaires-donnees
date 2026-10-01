@@ -1,4 +1,4 @@
-# Synchronisation Profs → DSpace
+# Synchronisation Profs → Papyrus
 
 Pipeline en deux étapes pour extraire les professeurs du fichier liste_personnel
 (export RH à largeur fixe), croiser leur ORCID via un fichier Excel, puis
@@ -11,7 +11,7 @@ fichier liste_personnel (.txt)  ┐
 fichier ORCID (.xlsx)           ┘
                                              │
                                              ▼
-                                 synchro_profs_dspace.py ─▶ DSpace (API REST)
+                                 synchro_profs_papyrus.py ─▶ Papyrus (API REST DSpace)
 ```
 
 ## Prérequis
@@ -23,7 +23,7 @@ pip install requests openpyxl python-dotenv
 (`python-dotenv` est optionnel — seulement nécessaire pour le chargement
 automatique du fichier `.env`, voir ci-dessous.)
 
-Les deux scripts doivent être dans le **même dossier** (`synchro_profs_dspace.py`
+Les deux scripts doivent être dans le **même dossier** (`synchro_profs_papyrus.py`
 importe des fonctions de `extraire_professeurs.py`).
 
 ### Configuration sensible (`.env`)
@@ -96,7 +96,7 @@ C'est le seul endroit à modifier si le format du fichier liste_personnel change
 
 ---
 
-## 2. `synchro_profs_dspace.py`
+## 2. `synchro_profs_papyrus.py`
 
 Prend la liste de professeurs (même logique d'extraction que ci-dessus) et
 la synchronise dans Papyrus via l'API REST :
@@ -118,13 +118,13 @@ la synchronise dans Papyrus via l'API REST :
 
 ```bash
 # 1. Mode simulation (RIEN n'est écrit) : montre ce qui serait fait
-python synchro_profs_dspace.py liste_personnel.txt --excel annuaire.xlsx
+python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx
 
 # 2. Petit test réel sur 5 profs seulement
-python synchro_profs_dspace.py liste_personnel.txt --excel annuaire.xlsx --apply --limit 5
+python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --apply --limit 5
 
 # 3. Une fois validé, sur la liste complète
-python synchro_profs_dspace.py liste_personnel.txt --excel annuaire.xlsx --apply
+python synchro_profs_papyrus.py liste_personnel.txt --excel annuaire.xlsx --apply
 ```
 
 ⚠️ **Par défaut, rien n'est écrit dans DSpace** tant que `--apply` n'est pas
@@ -159,7 +159,7 @@ pagination) et compare leur courriel à la liste actuelle :
 
 - **Présent dans le fichier** → `UdeM.statut = Actif` (déjà fait pendant le
   traitement normal, création ou mise à jour).
-- **Absent du fichier, mais présent dans DSpace** → `UdeM.statut = Inactif`.
+- **Absent du fichier, mais présent dans Papyrus** → `UdeM.statut = Inactif`.
   Rien n'est retiré ni supprimé — c'est un signal à réviser manuellement
   (le prof peut être parti, ou simplement absent de ce run par erreur).
 - **Déjà `Inactif`** → jamais retouché inutilement.
@@ -174,7 +174,7 @@ fenêtre où il semble à tort marqué `Inactif`.
 
 ### Journalisation
 
-Chaque run écrit un fichier `synchro_profs_dspace_AAAAMMJJ_HHMMSS.log` (ou
+Chaque run écrit un fichier `synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` (ou
 le chemin donné via `--log-file`) qui garde **tout le détail** (créations,
 mises à jour, liaisons, avertissements) — utile pour auditer après coup un
 run de plusieurs milliers d'entrées. La console, elle, reste compacte par
@@ -186,7 +186,7 @@ défaut :
 100/3000 (3%) — 80c 15m 5i 0e — ~45 min restantes
 ...
 Résumé : 2850 créé(s), 120 mis à jour, 25 inchangé(s), 5 erreur(s)
-  12 prof(s) absent(s) de la liste_personnel marqué(s) Inactif (présents dans DSpace mais plus dans le fichier)
+  12 prof(s) absent(s) de la liste_personnel marqué(s) Inactif (présents dans Papyrus mais plus dans le fichier)
   3 liaison(s) OrgUnit échouée(s) (probablement déjà liées)
 ```
 
@@ -210,12 +210,12 @@ la console (par défaut, seul le fichier `.log` le garde).
 Tout en haut du fichier, section `CONFIGURATION` :
 
 - Identifiants/URL par défaut
-- Noms des champs de métadonnées DSpace (`CHAMP_NOM`, `CHAMP_ORCID`,
+- Noms des champs de métadonnées Papyrus (`CHAMP_NOM`, `CHAMP_ORCID`,
   `CHAMP_CODEUNITE`, `CHAMP_STATUT`, etc.) — à ajuster si ton schéma de
   métadonnées diffère
 - `VALEUR_STATUT_ACTIF` / `VALEUR_STATUT_INACTIF` — les deux valeurs
   utilisées pour `UdeM.statut`
-- `NOM_RELATION_ORGUNIT` — nom du relationshipType DSpace pour le lien
+- `NOM_RELATION_ORGUNIT` — nom du relationshipType Papyrus pour le lien
   Person↔OrgUnit (résolu dynamiquement via `/core/relationshiptypes`, pas
   besoin de connaître l'ID ni l'ordre gauche/droite à l'avance)
 - Paramètres réseau (`NB_TENTATIVES_MAX`, `DELAI_BACKOFF_SECONDES`)
@@ -235,7 +235,7 @@ Person↔OrgUnit, qui repose uniquement sur l'UUID.
 → Le script essaie déjà UTF-8, cp1252 et latin-1 dans l'ordre ; si aucun ne
 fonctionne, le fichier a un encodage encore différent — le préciser.
 
-**`Échec de connexion DSpace (405) : Only POST is allowed for login requests`**
+**`Échec de connexion Papyrus (405) : Only POST is allowed for login requests`**
 → Généralement causé par une redirection HTTP suivie automatiquement (et
 convertie en GET). Déjà géré dans le script (`allow_redirects=False` +
 gestion manuelle), mais si l'erreur revient, vérifier que `--base-url`

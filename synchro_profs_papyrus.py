@@ -6,8 +6,8 @@ jour les existants (ORCID, CodeUnite, etc.), et les lie à leur OrgUnit par
 une vraie relation DSpace — le tout par correspondance de courriel.
 
 Usage:
-    python synchro_profs_dspace.py fichier.txt --excel annuaire.xlsx
-    python synchro_profs_dspace.py fichier.txt --excel annuaire.xlsx --apply
+    python synchro_profs_papyrus.py fichier.txt --excel annuaire.xlsx
+    python synchro_profs_papyrus.py fichier.txt --excel annuaire.xlsx --apply
 
 Par défaut le script tourne en mode SIMULATION (affiche ce qu'il ferait sans
 rien écrire dans DSpace). Ajoute --apply pour appliquer réellement les
@@ -133,7 +133,7 @@ DOSSIER_LOGS = "logs"     # dossier où écrire les fichiers .log par défaut (c
 # auditer après coup un run de plusieurs milliers d'entrées.
 # =============================================================================
 
-LOG = logging.getLogger("synchro_profs_dspace")
+LOG = logging.getLogger("synchro_profs_papyrus")
 
 
 def configurer_journalisation(chemin_log, verbose=False):
@@ -662,7 +662,7 @@ def analyser_arguments():
 def main():
     args = analyser_arguments()
 
-    chemin_log = args.log_file or os.path.join(DOSSIER_LOGS, f"synchro_profs_dspace_{datetime.now():%Y%m%d_%H%M%S}.log")
+    chemin_log = args.log_file or os.path.join(DOSSIER_LOGS, f"synchro_profs_papyrus_{datetime.now():%Y%m%d_%H%M%S}.log")
     configurer_journalisation(chemin_log, verbose=args.verbose)
 
     lignes = lire_lignes(args.fichier_txt)
