@@ -132,13 +132,13 @@ en plein milieu, il suffit de le relancer.
 
 ```bash
 # 1. Simulation : montre ce qui serait fait, sans RIEN écrire
-python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx
+python synchro_profs_papyrus.py data/synchro_PERSONNEL.txt --excel data/SynchroORCID.xlsx
 
 # 2. Petit essai réel sur 5 profs
-python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx --apply --limit 5
+python synchro_profs_papyrus.py data/synchro_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply --limit 5
 
 # 3. Toute la liste
-python synchro_profs_papyrus.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx --apply
+python synchro_profs_papyrus.py data/synchro_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply
 
 # Même chose, mais en laissant le script choisir les fichiers les plus récents de data/
 python synchro_profs_papyrus.py data --excel data --apply
