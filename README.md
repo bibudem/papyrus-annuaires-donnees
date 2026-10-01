@@ -74,20 +74,20 @@ Papyrus.
 
 ```bash
 # Le tableau
-python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt
+python outils/extraire_professeurs.py data/liste_PERSONNEL.txt
 
 # Avec les ORCID
-python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx
+python outils/extraire_professeurs.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx
 
 # En plus, enregistrer le résultat dans un fichier CSV (pratique pour Excel)
-python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt --excel data/SynchroORCID_20260924.xlsx --csv resultat.csv
+python outils/extraire_professeurs.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --csv resultat.csv
 
 # Vérifier que le fichier est bien lu (utile si son format change)
-python outils/extraire_professeurs.py data/synchro_PERSONNEL_20261001.txt --diagnostic
+python outils/extraire_professeurs.py data/liste_PERSONNEL_20261001.txt --diagnostic
 ```
 
 `--csv` et `--diagnostic` existent seulement dans ce script, pas dans
-`synchro_profs_papyrus.py`.
+`liste_profs_papyrus.py`.
 
 ### Le fichier Excel
 
@@ -109,7 +109,7 @@ comptent comme « professeur » (`TITRES_PROFESSEUR`), noms des colonnes Excel.
 
 ---
 
-## 2. `synchro_profs_papyrus.py` — mettre Papyrus à jour
+## 2. `liste_profs_papyrus.py` — mettre Papyrus à jour
 
 Pour chaque prof de la liste, le script :
 
@@ -132,23 +132,23 @@ en plein milieu, il suffit de le relancer.
 
 ```bash
 # 1. Simulation : montre ce qui serait fait, sans RIEN écrire
-python synchro_profs_papyrus.py data/synchro_PERSONNEL.txt --excel data/SynchroORCID.xlsx
+python liste_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx
 
 # 2. Petit essai réel sur 5 profs
-python synchro_profs_papyrus.py data/synchro_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply --limit 5
+python liste_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply --limit 5
 
 # 3. Toute la liste
-python synchro_profs_papyrus.py data/synchro_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply
+python liste_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply
 
 # Même chose, mais en laissant le script choisir les fichiers les plus récents de data/
-python synchro_profs_papyrus.py data --excel data --apply
+python liste_profs_papyrus.py data --excel data --apply
 ```
 
 **Sans `--apply`, rien n'est écrit dans Papyrus.** Faites toujours une
 simulation avant.
 
 **Donner un dossier au lieu d'un fichier** : le script prend le
-`synchro_PERSONNEL_*.txt` et le `SynchroORCID_*.xlsx` les plus récents
+`liste_PERSONNEL_*.txt` et le `SynchroORCID_*.xlsx` les plus récents
 (d'après la date dans leur nom) et écrit dans le journal lesquels il a
 choisis. C'est la façon conseillée pour l'exécution automatique.
 
@@ -165,10 +165,10 @@ choisis. C'est la façon conseillée pour l'exécution automatique.
 | `--user` / `--password` | valeurs du `.env` | Compte administrateur |
 | `--community` | valeur du `.env` | Communauté où se trouve la collection Person |
 | `--collection` | trouvée toute seule | Identifiant (UUID) de la collection à utiliser |
-| `--log-file` | `logs/synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Où écrire le journal |
+| `--log-file` | `logs/liste_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Où écrire le journal |
 | `--verbose` | non | Affiche tout le détail à l'écran, pas seulement dans le journal |
 
-`python synchro_profs_papyrus.py --help` affiche la liste complète.
+`python liste_profs_papyrus.py --help` affiche la liste complète.
 
 ### La collection
 
@@ -212,7 +212,7 @@ lui-même dans ces cas :
 Les trois premiers peuvent être désactivés avec `--ignorer-seuils`. C'est
 nécessaire pour le **tout premier chargement** (plus de 100 fiches à
 créer) ou pour un test sur un petit fichier. Les chiffres se changent en
-haut de `synchro_profs_papyrus.py` (`MIN_PROFESSEURS_ATTENDUS`,
+haut de `liste_profs_papyrus.py` (`MIN_PROFESSEURS_ATTENDUS`,
 `SEUIL_MAX_CREATIONS`, `SEUIL_MAX_DEPARTS_POURCENT`,
 `MAX_ERREURS_CONSECUTIVES`).
 
@@ -231,7 +231,7 @@ Autres protections :
 Exemple de commande à mettre dans le Planificateur de tâches Windows (ou cron) :
 
 ```bash
-python C:\chemin\vers\papyrus-liste-prof\synchro_profs_papyrus.py C:\chemin\vers\papyrus-liste-prof\data --excel C:\chemin\vers\papyrus-liste-prof\data --apply
+python C:\chemin\vers\papyrus-liste-prof\liste_profs_papyrus.py C:\chemin\vers\papyrus-liste-prof\data --excel C:\chemin\vers\papyrus-liste-prof\data --apply
 ```
 
 Avant de l'activer, faites-le tourner quelques jours **sans `--apply`** et
@@ -249,7 +249,7 @@ Le code de sortie indique au planificateur si tout s'est bien passé :
 ## Le journal
 
 Chaque exécution écrit un fichier dans `logs/`
-(`synchro_profs_papyrus_AAAAMMJJ_HHMMSS.log`) avec **tout le détail** :
+(`liste_profs_papyrus_AAAAMMJJ_HHMMSS.log`) avec **tout le détail** :
 fiches créées, modifiées, liens ajoutés ou retirés, avertissements et
 erreurs (avec leur cause). À l'écran, on ne voit que l'avancement et le
 résumé :
@@ -277,7 +277,7 @@ script tourne.
 - **Double affiliation** : quand un prof change d'unité, le script retire
   son lien vers l'ancienne unité. Il retirerait aussi un lien vers une
   deuxième unité ajouté à la main. Si ça vous pose problème, mettez
-  `RETIRER_ANCIENNES_UNITES = False` en haut de `synchro_profs_papyrus.py` :
+  `RETIRER_ANCIENNES_UNITES = False` en haut de `liste_profs_papyrus.py` :
   le script ne retirera plus jamais de lien.
 - **Erreur 500 sur `/core/relationships`** : Papyrus ne renvoie pas le
   détail de l'erreur. Il faut regarder le `dspace.log` sur le serveur, à
