@@ -37,8 +37,8 @@ pouvez le lancer depuis n'importe quel dossier.
 
 ### Le fichier `.env` (identifiants)
 
-L'adresse de Papyrus et le compte à utiliser se mettent dans un fichier
-`.env`, pour ne pas avoir à taper le mot de passe dans la commande :
+L'adresse de Papyrus, le compte à utiliser et les fichiers à lire se mettent
+dans un fichier `.env`, pour ne pas avoir à les taper dans la commande :
 
 ```bash
 cp .env.example .env
@@ -51,14 +51,20 @@ DSPACE_USER=dspace
 DSPACE_PASSWORD=...
 DSPACE_COMMUNITY=1acd99a0-6ffb-42f8-a261-30b96f3f2405
 DSPACE_COLLECTION=
+FICHIER_PERSONNEL=data/synchro_PERSONNEL_*.txt
+FICHIER_ORCID=data/SynchroORCID_*.xlsx
 ```
 
 - `DSPACE_COLLECTION` (facultatif) : l'UUID de la collection Person. Vide,
   le script la cherche dans la communauté ; s'il en trouve plusieurs, il les
   affiche et s'arrête — copiez alors l'UUID de la bonne ici.
+- `FICHIER_PERSONNEL` / `FICHIER_ORCID` : le chemin d'un fichier, ou un motif
+  avec `*` — le script prend alors le plus récent (d'après la date dans le
+  nom) et écrit dans le journal lequel il a choisi. Un chemin relatif part du
+  dossier du script.
 - Ne mettez jamais `.env` dans Git (il est déjà exclu par `.gitignore`).
-- Si vous donnez `--base-url`, `--user`, `--password`, `--community` ou `--collection` dans
-  la commande, ces valeurs passent avant celles du `.env`.
+- Ce que vous donnez dans la commande (fichiers, `--base-url`, `--user`,
+  `--password`, `--community`, `--collection`) passe avant le `.env`.
 - Avec `--apply`, le script **refuse de démarrer** s'il ne trouve pas
   l'adresse, l'utilisateur et le mot de passe (ni dans `.env`, ni dans la
   commande). Il n'écrit jamais dans Papyrus avec des valeurs par défaut.
@@ -134,34 +140,31 @@ en plein milieu, il suffit de le relancer.
 
 ### Comment le lancer
 
+Avec le `.env` rempli, il n'y a rien d'autre à donner :
+
 ```bash
 # 1. Simulation : montre ce qui serait fait, sans RIEN écrire
-python synchro_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx
+python synchro_profs_papyrus.py
 
 # 2. Petit essai réel sur 5 profs
-python synchro_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply --limit 5
+python synchro_profs_papyrus.py --apply --limit 5
 
 # 3. Toute la liste
-python synchro_profs_papyrus.py data/liste_PERSONNEL.txt --excel data/SynchroORCID.xlsx --apply
+python synchro_profs_papyrus.py --apply
 
-# Même chose, mais en laissant le script choisir les fichiers les plus récents de data/
-python synchro_profs_papyrus.py data --excel data --apply
+# Utiliser d'autres fichiers que ceux du .env, pour une fois
+python synchro_profs_papyrus.py data/autre_PERSONNEL.txt --excel data/autre_ORCID.xlsx
 ```
 
 **Sans `--apply`, rien n'est écrit dans Papyrus.** Faites toujours une
 simulation avant.
 
-**Donner un dossier au lieu d'un fichier** : le script prend le
-`liste_PERSONNEL_*.txt` et le `SynchroORCID_*.xlsx` les plus récents
-(d'après la date dans leur nom) et écrit dans le journal lesquels il a
-choisis. C'est la façon conseillée pour l'exécution automatique.
-
 ### Options
 
 | Option | À quoi ça sert |
 |---|---|
-| `fichier_txt` | Le fichier liste_personnel, ou le dossier `data` (le plus récent est choisi) |
-| `--excel` | Le fichier Excel des ORCID, ou le dossier `data` (le plus récent est choisi) |
+| `fichier_txt` | Le fichier liste_personnel (remplace `FICHIER_PERSONNEL` du `.env`) |
+| `--excel` | Le fichier Excel des ORCID (remplace `FICHIER_ORCID` du `.env`) |
 | `--apply` | Écrit vraiment dans Papyrus (sans cette option : simulation) |
 | `--limit N` | Ne traite que les N premiers profs, pour tester (les départs ne sont pas vérifiés) |
 | `--ignorer-seuils` | Désactive les garde-fous, ex. pour le premier chargement |

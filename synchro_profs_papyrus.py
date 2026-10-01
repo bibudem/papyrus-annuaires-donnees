@@ -93,11 +93,17 @@ COMMUNAUTE_PAR_DEFAUT = os.environ.get("DSPACE_COMMUNITY", "1acd99a0-6ffb-42f8-a
 COLLECTION_PAR_DEFAUT = os.environ.get("DSPACE_COLLECTION") or None
 
 # --- Fichiers d'entrée ---
-# Si un DOSSIER est donné à la place d'un fichier (fichier_txt ou --excel), le
-# fichier le plus récent correspondant au motif y est choisi automatiquement
-# (d'après la date AAAAMMJJ dans son nom, sinon sa date de modification).
+# Chaque fichier peut être donné comme un chemin de fichier, un dossier ou un
+# motif avec * (ex. data/synchro_PERSONNEL_*.txt). Pour un dossier ou un motif,
+# le fichier le plus récent est choisi (d'après la date AAAAMMJJ dans son nom,
+# sinon sa date de modification). Pour un dossier, on y cherche le motif ci-dessous.
 MOTIF_FICHIER_PERSONNEL = "synchro_PERSONNEL_*.txt"
 MOTIF_FICHIER_ORCID = "SynchroORCID_*.xlsx"
+# Fichiers utilisés quand la commande n'en donne pas : FICHIER_PERSONNEL et
+# FICHIER_ORCID du .env, sinon les motifs ci-dessus dans data/. Un chemin
+# relatif part du dossier du script (pas du dossier courant).
+FICHIER_PERSONNEL_PAR_DEFAUT = os.environ.get("FICHIER_PERSONNEL") or os.path.join("data", MOTIF_FICHIER_PERSONNEL)
+FICHIER_ORCID_PAR_DEFAUT = os.environ.get("FICHIER_ORCID") or os.path.join("data", MOTIF_FICHIER_ORCID)
 # Au-delà de cet âge (en jours), le fichier est signalé comme périmé (export
 # non reçu ?) : le run se fait quand même, mais finit avec le code de sortie 2.
 AGE_MAX_FICHIER_PERSONNEL_JOURS = 2
@@ -766,12 +772,12 @@ def analyser_arguments():
         description="Synchronise les professeurs extraits avec un dépôt DSpace 7 (crée/met à jour "
                      "les items Person par correspondance de courriel)."
     )
-    parser.add_argument("fichier_txt",
-                         help=f"Fichier Synchro (.txt à largeur fixe), ou dossier : le plus récent "
-                              f"'{MOTIF_FICHIER_PERSONNEL}' y est alors choisi")
-    parser.add_argument("--excel", required=True, metavar="FICHIER.xlsx",
-                         help=f"Fichier Excel contenant les ORCID (colonnes 'Courriel' et 'ORCID'), "
-                              f"ou dossier : le plus récent '{MOTIF_FICHIER_ORCID}' y est alors choisi")
+    parser.add_argument("fichier_txt", nargs="?",
+                         help="Fichier Synchro (.txt à largeur fixe), dossier ou motif avec * (le plus "
+                              "récent est choisi). Défaut : FICHIER_PERSONNEL du .env")
+    parser.add_argument("--excel", metavar="FICHIER.xlsx",
+                         help="Fichier Excel contenant les ORCID (colonnes 'Courriel' et 'ORCID'), dossier "
+                              "ou motif avec * (le plus récent est choisi). Défaut : FICHIER_ORCID du .env")
     parser.add_argument("--base-url", help="URL de base de l'API REST DSpace (défaut : DSPACE_BASE_URL du .env)")
     parser.add_argument("--user", help="Utilisateur admin DSpace (défaut : DSPACE_USER du .env)")
     parser.add_argument("--password", help="Mot de passe admin DSpace (défaut : DSPACE_PASSWORD du .env)")
@@ -803,6 +809,10 @@ def analyser_arguments():
     args.base_url = args.base_url or BASE_URL_PAR_DEFAUT
     args.user = args.user or UTILISATEUR_PAR_DEFAUT
     args.password = args.password or MOT_DE_PASSE_PAR_DEFAUT
+
+    # Fichiers absents de la commande : ceux du .env, relatifs au dossier du script.
+    args.fichier_txt = args.fichier_txt or os.path.join(DOSSIER_SCRIPT, FICHIER_PERSONNEL_PAR_DEFAUT)
+    args.excel = args.excel or os.path.join(DOSSIER_SCRIPT, FICHIER_ORCID_PAR_DEFAUT)
     return args
 
 
@@ -840,13 +850,16 @@ def date_du_fichier(chemin):
 
 
 def resoudre_fichier_entree(chemin, motif):
-    """Retourne 'chemin' tel quel si c'est un fichier ; si c'est un dossier,
-    retourne le fichier le plus récent qui y correspond à 'motif'."""
-    if not os.path.isdir(chemin):
+    """Retourne 'chemin' tel quel si c'est un fichier ; si c'est un motif avec
+    * (ou un dossier, où l'on cherche 'motif'), retourne le fichier
+    correspondant le plus récent."""
+    if os.path.isdir(chemin):
+        chemin = os.path.join(chemin, motif)
+    elif not glob.has_magic(chemin):
         return chemin
-    candidats = [f for f in glob.glob(os.path.join(chemin, motif)) if os.path.isfile(f)]
+    candidats = [f for f in glob.glob(chemin) if os.path.isfile(f)]
     if not candidats:
-        raise FileNotFoundError(f"aucun fichier '{motif}' dans le dossier '{chemin}'")
+        raise FileNotFoundError(f"aucun fichier ne correspond à '{chemin}'")
     return max(candidats, key=date_du_fichier)
 
 
