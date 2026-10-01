@@ -154,21 +154,19 @@ choisis. C'est la façon conseillée pour l'exécution automatique.
 
 ### Options
 
-| Option | Par défaut | À quoi ça sert |
-|---|---|---|
-| `fichier_txt` | *(obligatoire)* | Le fichier liste_personnel, ou un dossier (le plus récent est choisi) |
-| `--excel` | *(obligatoire)* | Le fichier Excel des ORCID, ou un dossier (le plus récent est choisi) |
-| `--apply` | non (simulation) | Écrit vraiment dans Papyrus |
-| `--limit N` | tous | Ne traite que les N premiers profs, pour tester. Les départs ne sont alors **pas** vérifiés |
-| `--ignorer-seuils` | non | Désactive les garde-fous (voir plus bas), ex. pour le tout premier chargement |
-| `--base-url` | valeur du `.env` | Adresse de l'API Papyrus (finit par `/server/api`) |
-| `--user` / `--password` | valeurs du `.env` | Compte administrateur |
-| `--community` | valeur du `.env` | Communauté où se trouve la collection Person |
-| `--collection` | trouvée toute seule | Identifiant (UUID) de la collection à utiliser |
-| `--log-file` | `logs/liste_profs_papyrus_AAAAMMJJ_HHMMSS.log` | Où écrire le journal |
-| `--verbose` | non | Affiche tout le détail à l'écran, pas seulement dans le journal |
+| Option | À quoi ça sert |
+|---|---|
+| `fichier_txt` | Le fichier liste_personnel, ou le dossier `data` (le plus récent est choisi) |
+| `--excel` | Le fichier Excel des ORCID, ou le dossier `data` (le plus récent est choisi) |
+| `--apply` | Écrit vraiment dans Papyrus (sans cette option : simulation) |
+| `--limit N` | Ne traite que les N premiers profs, pour tester (les départs ne sont pas vérifiés) |
+| `--ignorer-seuils` | Désactive les garde-fous, ex. pour le premier chargement |
+| `--collection` | À donner seulement si le script trouve plusieurs collections |
+| `--verbose` | Affiche tout le détail à l'écran |
 
-`python liste_profs_papyrus.py --help` affiche la liste complète.
+Les autres options servent rarement : `--base-url`, `--user`, `--password`
+et `--community` remplacent les valeurs du `.env`, et `--log-file` change
+l'endroit du journal. `python synchro_profs_papyrus.py --help` les liste toutes.
 
 ### La collection
 
