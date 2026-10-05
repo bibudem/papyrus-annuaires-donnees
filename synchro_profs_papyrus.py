@@ -2,7 +2,7 @@
 """
 Synchronise les professeurs (extraits par extraire_professeurs.py) avec un
 dépôt DSpace 7 via son API REST : crée les items "Person" manquants, met à
-jour les existants (ORCID, CodeUnite, etc.), et les lie à leur OrgUnit par
+jour les existants (ORCID, fonction, etc.), et les lie à leur OrgUnit par
 une vraie relation DSpace — le tout par correspondance de courriel.
 
 Usage:
@@ -117,6 +117,9 @@ CHAMP_PRENOM = "person.givenName"
 CHAMP_COURRIEL = "person.email"
 CHAMP_FONCTION = "person.jobTitle"
 CHAMP_ORCID = "person.identifier.orcid"
+# Champ portant le CodeUnite sur les items OrgUnit : sert uniquement à retrouver
+# l'OrgUnit d'un prof. Il n'est plus écrit sur les fiches Person, et il est
+# retiré des fiches Person qui le portent encore (voir operation_retrait_champ).
 CHAMP_CODEUNITE = "organization.identifier.UdeM"
 
 # --- Statut Actif/Inactif (présence dans la liste_personnel actuelle) ---
@@ -599,7 +602,14 @@ class DSpaceClient:
 # CONSTRUCTION DES MÉTADONNÉES / OPÉRATIONS JSON PATCH
 # =============================================================================
 
-def construire_metadonnees(nom, prenom, courriel, orcid, statut, code_unite):
+def formater_fonction(statut):
+    """Met le titre au format attendu dans CHAMP_FONCTION : la marque du
+    féminin entre parenthèses devient « .e », ex.
+    'Professeur(e) agrégé(e)' -> 'Professeur.e agrégé.e'."""
+    return statut.replace("(e)", ".e") if statut else statut
+
+
+def construire_metadonnees(nom, prenom, courriel, orcid, statut):
     """Construit le dict de métadonnées DSpace pour la création d'un item Person.
     Ne contient PAS la relation OrgUnit : elle est créée séparément via
     l'API /core/relationships (voir lier_orgunit)."""
@@ -611,11 +621,9 @@ def construire_metadonnees(nom, prenom, courriel, orcid, statut, code_unite):
         CHAMP_STATUT: [{"value": VALEUR_STATUT_ACTIF}],
     }
     if statut:
-        metadonnees[CHAMP_FONCTION] = [{"value": statut}]
+        metadonnees[CHAMP_FONCTION] = [{"value": formater_fonction(statut)}]
     if orcid:
         metadonnees[CHAMP_ORCID] = [{"value": orcid}]
-    if code_unite:
-        metadonnees[CHAMP_CODEUNITE] = [{"value": code_unite}]
     return metadonnees
 
 
@@ -630,16 +638,23 @@ def operation_maj_champ(item_existant, champ, valeur):
     return None
 
 
-def operations_maj_personne(item_existant, nom, prenom, statut, orcid, code_unite):
+def operation_retrait_champ(item_existant, champ):
+    """Construit une opération JSON Patch qui retire toutes les valeurs d'un
+    champ d'un item existant, ou None si le champ est déjà absent."""
+    if item_existant.get("metadata", {}).get(champ):
+        return {"op": "remove", "path": f"/metadata/{champ}"}
+    return None
+
+
+def operations_maj_personne(item_existant, nom, prenom, statut, orcid):
     """Liste toutes les opérations JSON Patch nécessaires pour mettre à jour
     un item Person existant (seuls les champs différents génèrent une opération).
     La relation OrgUnit n'est PAS gérée ici, voir lier_orgunit."""
     champs_a_verifier = [
         (CHAMP_NOM, nom),
         (CHAMP_PRENOM, prenom),
-        (CHAMP_FONCTION, statut),
+        (CHAMP_FONCTION, formater_fonction(statut)),
         (CHAMP_ORCID, orcid),
-        (CHAMP_CODEUNITE, code_unite),
         (CHAMP_STATUT, VALEUR_STATUT_ACTIF),  # présent dans le fichier -> toujours Actif
     ]
     operations = []
@@ -649,6 +664,10 @@ def operations_maj_personne(item_existant, nom, prenom, statut, orcid, code_unit
         operation = operation_maj_champ(item_existant, champ, valeur)
         if operation:
             operations.append(operation)
+    # Le CodeUnite n'est plus porté par les fiches Person : on retire l'ancien.
+    retrait = operation_retrait_champ(item_existant, CHAMP_CODEUNITE)
+    if retrait:
+        operations.append(retrait)
     return operations
 
 
@@ -753,7 +772,7 @@ def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignore
     items nouvellement marqués Inactif (ou qui le seraient, en simulation / si bloqué)."""
     items = client.lister_items_de_la_collection(collection_uuid)
     signaler_doublons(items)
-    absents = []  # (item, courriel, opération Inactif ou None si déjà Inactif)
+    absents = []  # (item, courriel, opération Inactif ou None, opération retrait CodeUnite ou None)
     nb_departs = 0
     for item in items:
         valeurs_courriel = item.get("metadata", {}).get(CHAMP_COURRIEL, [])
@@ -762,11 +781,12 @@ def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignore
             continue  # présent dans la liste actuelle -> déjà traité comme Actif ailleurs
 
         operation = operation_maj_champ(item, CHAMP_STATUT, VALEUR_STATUT_INACTIF)
+        retrait = operation_retrait_champ(item, CHAMP_CODEUNITE)
         if operation:
             nb_departs += 1
-        elif not RETIRER_UNITE_SI_INACTIF:
+        elif not RETIRER_UNITE_SI_INACTIF and not retrait:
             continue  # déjà Inactif, rien d'autre à faire
-        absents.append((item, courriel_item, operation))
+        absents.append((item, courriel_item, operation, retrait))
 
     pourcentage = 100 * nb_departs / len(items) if items else 0
     if pourcentage > SEUIL_MAX_DEPARTS_POURCENT and not ignorer_seuils:
@@ -777,12 +797,15 @@ def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignore
 
     nb_erreurs = 0
     nb_liens_retires = 0
-    for item, courriel_item, operation in absents:
+    for item, courriel_item, operation, retrait in absents:
         try:
             if operation:
                 LOG.debug(f"[INACTIF] <{courriel_item or 'sans courriel'}> ({item.get('uuid')})")
-                if appliquer:
-                    client.mettre_a_jour_personne(item["uuid"], [operation])
+            if retrait:
+                LOG.debug(f"  ↳ retrait de {CHAMP_CODEUNITE} <{courriel_item or 'sans courriel'}>")
+            operations = [op for op in (operation, retrait) if op]
+            if operations and appliquer:
+                client.mettre_a_jour_personne(item["uuid"], operations)
             if RETIRER_UNITE_SI_INACTIF:
                 nb_liens_retires += retirer_liens_orgunit(client, item["uuid"], appliquer)
         except Exception as e:
@@ -818,7 +841,7 @@ def synchroniser_professeur(client, collection_uuid, professeur, orcid, applique
         LOG.debug(f"[NOUVEAU] {nom}, {prenom} <{courriel}> ORCID={orcid or '—'}")
         person_uuid = None
         if appliquer:
-            metadonnees = construire_metadonnees(nom, prenom, courriel, orcid, statut, code_unite)
+            metadonnees = construire_metadonnees(nom, prenom, courriel, orcid, statut)
             person_uuid = client.creer_personne(collection_uuid, metadonnees, f"{nom}, {prenom}")["uuid"]
         lien_echoue = False
         if orgunit and person_uuid:
@@ -831,7 +854,7 @@ def synchroniser_professeur(client, collection_uuid, professeur, orcid, applique
                 lien_echoue = True
         return "cree", lien_echoue, orgunit_introuvable, 0
 
-    operations = operations_maj_personne(item_existant, nom, prenom, statut, orcid, code_unite)
+    operations = operations_maj_personne(item_existant, nom, prenom, statut, orcid)
     if operations:
         LOG.debug(f"[MISE À JOUR] {nom}, {prenom} <{courriel}> — {len(operations)} champ(s) à modifier")
         if appliquer:
