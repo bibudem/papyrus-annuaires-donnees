@@ -34,6 +34,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import datetime
 
 import requests
@@ -383,8 +384,8 @@ class DSpaceClient:
         if code_unite in self._cache_orgunits:
             return self._cache_orgunits[code_unite]
 
-        # Les fiches Person portent AUSSI le CodeUnite (même champ) : sans filtre,
-        # une unité de 100+ profs voit son OrgUnit noyée parmi les Person dans
+        # Les anciennes fiches Person peuvent encore porter le CodeUnite (même
+        # champ) tant qu'elles n'ont pas été nettoyées : sans filtre, une unité de 100+ profs voit son OrgUnit noyée parmi les Person dans
         # les résultats. On filtre donc sur le type d'entité OrgUnit, et on
         # parcourt toutes les pages au besoin.
         resultat = None
@@ -602,11 +603,46 @@ class DSpaceClient:
 # CONSTRUCTION DES MÉTADONNÉES / OPÉRATIONS JSON PATCH
 # =============================================================================
 
+# Correspondance Fonction (Synchro) -> forme à utiliser dans Papyrus (CHAMP_FONCTION)
+CORRESPONDANCE_FONCTIONS = {
+    "Prof agrégé(e) PTG SC Acad.": "Professeur.e agrégé.e (Plein temps géographique sous contrat)",
+    "Prof agrégé(e) PTG SC Recherc.": "Professeur.e agrégé.e (Plein temps géographique sous contrat)",
+    "Prof titulaire PTG SC Acad.": "Professeur.e titulaire (Plein temps géographique sous contrat)",
+    "Prof. sous octroi titulaire": "Professeur.e sous octroi titulaire",
+    "Professeur associé": "Professeur.e associé.e",
+    "Professeur form. prat. titulai": "Professeur.e de formation pratique titulaire",
+    "Professeur sous octroi adjoint": "Professeur.e sous octroi adjoint.e",
+    "Professeur(e) adjoint(e)": "Professeur.e adjoint.e",
+    "Professeur(e) agrégé(e)": "Professeur.e agrégé.e",
+    "Professeur(e) form.prat agrég.": "Professeur.e de formation pratique agrégé.e",
+    "Professeur(e) sous oct. agrég.": "Professeur.e sous octroi agrégé.e",
+    "Professeur(e) titulaire": "Professeur.e titulaire",
+    "Professeur/ chercheur adjoint": "Professeur.e / chercheur.e adjoint.e",
+    "Professeur/ chercheur agrégé": "Professeur.e / chercheur.e agrégé.e",
+    "Professeur/chercheur titulaire": "Professeur.e / chercheur.e titulaire",
+    "V-doyen(ne)": "Vice-doyen.ne",
+    "V-doyen(ne) recherche": "Vice-doyen.ne à la recherche",
+}
+
+
+_fonctions_inconnues = set()  # pour ne signaler chaque fonction inconnue qu'une fois
+
+
 def formater_fonction(statut):
-    """Met le titre au format attendu dans CHAMP_FONCTION : la marque du
-    féminin entre parenthèses devient « .e », ex.
-    'Professeur(e) agrégé(e)' -> 'Professeur.e agrégé.e'."""
-    return statut.replace("(e)", ".e") if statut else statut
+    """Met le titre au format attendu dans CHAMP_FONCTION selon
+    CORRESPONDANCE_FONCTIONS. Une fonction absente de la table est envoyée
+    telle quelle, avec « (e) » remplacé par « .e », et signalée au journal."""
+    if not statut:
+        return statut
+    # NFC : un accent saisi en forme décomposée (ex. copié d'Excel) doit
+    # quand même correspondre à la clé de la table.
+    statut = " ".join(unicodedata.normalize("NFC", statut).split())
+    if statut in CORRESPONDANCE_FONCTIONS:
+        return CORRESPONDANCE_FONCTIONS[statut]
+    if statut not in _fonctions_inconnues:
+        _fonctions_inconnues.add(statut)
+        LOG.warning(f"⚠ Fonction absente de CORRESPONDANCE_FONCTIONS, envoyée telle quelle : '{statut}'")
+    return statut.replace("(e)", ".e")
 
 
 def construire_metadonnees(nom, prenom, courriel, orcid, statut):
@@ -761,8 +797,9 @@ def signaler_doublons(items):
 def marquer_departs(client, collection_uuid, courriels_actifs, appliquer, ignorer_seuils=False):
     """Parcourt tous les items Person de la collection et, pour ceux dont le
     courriel n'est PAS dans courriels_actifs (= absents de la liste_personnel
-    actuelle) : marque CHAMP_STATUT='Inactif' et, si RETIRER_UNITE_SI_INACTIF,
-    retire leurs liens OrgUnit. La fiche elle-même n'est jamais supprimée.
+    actuelle) : marque CHAMP_STATUT='Inactif', retire CHAMP_CODEUNITE s'il est
+    encore présent et, si RETIRER_UNITE_SI_INACTIF, retire leurs liens OrgUnit.
+    La fiche elle-même n'est jamais supprimée.
 
     Garde-fou : si plus de SEUIL_MAX_DEPARTS_POURCENT % de la collection
     devrait passer Inactif d'un coup, rien n'est fait (fichier d'entrée
