@@ -25,6 +25,7 @@ Organisation des fichiers :
 ```
 papyrus-annuaires-donnees/
 ├── synchro_profs_papyrus.py
+├── enrichir_orcid_papyrus.py
 ├── .env.example   # modèle pour créer votre .env
 ├── outils/
 │   └── extraire_professeurs.py
@@ -126,7 +127,7 @@ Pour chaque prof de la liste, le script :
 - **crée** sa fiche Person si elle n'existe pas encore (on cherche par
   courriel), avec `UdeM.statut = Actif` ;
 - **met à jour** seulement ce qui a changé (nom, prénom, poste, ORCID,
-  CodeUnite, statut). Une case vide dans le fichier n'efface jamais une
+  statut). Une case vide dans le fichier n'efface jamais une
   valeur déjà dans Papyrus ;
 - **le relie à son unité** (OrgUnit, trouvée par son CodeUnite). Si le prof
   a changé d'unité, le lien vers la nouvelle unité est ajouté, puis celui
@@ -190,6 +191,57 @@ collection :
 Les départs ne sont pas vérifiés quand on utilise `--limit` (la liste est
 incomplète, sinon tous les autres profs passeraient `Inactif`), ni quand le
 run a été arrêté avant la fin.
+
+---
+
+## 3. `enrichir_orcid_papyrus.py` — mots-clés et biographie ORCID
+
+Ce script complète les fiches Person de Papyrus avec le profil ORCID public
+de chaque prof :
+
+| Dans ORCID | Dans Papyrus |
+|---|---|
+| Mots-clés (*Keywords*) | `dc.subject.discipline`, une valeur par mot-clé |
+| Biographie | `UdeM.DonneesORCID` |
+
+Il traite toutes les fiches de la collection qui ont un ORCID
+(`person.identifier.orcid`, rempli par `synchro_profs_papyrus.py`). Il ne lit
+ni le fichier liste_personnel ni le fichier Excel. Les fiches `Inactif` sont
+sautées, sauf avec `--inclure-inactifs`.
+
+- **Champ vide** dans Papyrus : il est rempli avec la valeur ORCID.
+- **Champ déjà rempli et différent** : il est remplacé. ORCID est la seule
+  source pour ces deux champs : un mot-clé ajouté à la main dans
+  `dc.subject.discipline` est remplacé au prochain run.
+- **Rien dans ORCID** (pas de mots-clés, pas de biographie, ou profil privé) :
+  la fiche n'est pas touchée. Le script n'efface jamais rien.
+- Un mot-clé ORCID qui en regroupe plusieurs (« écologie, climat; eau ») est
+  découpé sur `,`, `;` et le retour à la ligne. Les doublons sont retirés.
+  Des mots-clés séparés seulement par des espaces ne peuvent pas être découpés :
+  ils restent en une seule valeur.
+
+```bash
+# Simulation (rien n'est écrit) ; --verbose montre les mots-clés trouvés
+python enrichir_orcid_papyrus.py --verbose
+
+# Petit essai réel, puis toute la collection
+python enrichir_orcid_papyrus.py --apply --limit 5
+python enrichir_orcid_papyrus.py --apply
+```
+
+Il utilise le même `.env` que la synchronisation, et les mêmes options
+`--apply`, `--limit`, `--verbose`, `--log-file`, `--base-url`, `--user`,
+`--password`, `--community` et `--collection`. Il partage aussi son verrou :
+les deux scripts ne peuvent pas écrire en même temps. Comptez quelques minutes
+pour toute la collection (un appel ORCID par fiche). Une fois par semaine
+suffit : les profils ORCID changent peu.
+
+À la fin, le résumé liste les ORCID introuvables, désactivés ou fusionnés
+dans un autre profil : l'ORCID de ces fiches est à vérifier.
+
+Facultatif : avec des identifiants « Public API » ORCID dans le `.env`
+(`ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET`), le script s'authentifie et a des
+limites d'appel plus généreuses. Sans eux, l'accès anonyme suffit.
 
 ---
 
