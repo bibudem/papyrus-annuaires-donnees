@@ -129,6 +129,12 @@ Pour chaque prof de la liste, le script :
 - **met à jour** seulement ce qui a changé (nom, prénom, poste, ORCID,
   statut). Une case vide dans le fichier n'efface jamais une
   valeur déjà dans Papyrus ;
+- pour le **poste** (`person.jobTitle`) : quand le titre change et que le
+  nouveau est un titre de rang (Professeur.e adjoint.e, agrégé.e, titulaire,
+  etc. — liste `FONCTIONS_DE_RANG`), il **remplace** l'ancien titre de rang,
+  par exemple après une promotion. Les titres saisis à la main, hors de cette
+  liste, sont **gardés**. Un autre titre de la Synchro (ex. Vice-doyen.ne)
+  remplace le premier titre de la fiche, comme avant ;
 - **le relie à son unité** (OrgUnit, trouvée par son CodeUnite). Si le prof
   a changé d'unité, le lien vers la nouvelle unité est ajouté, puis celui
   vers l'ancienne est retiré ;

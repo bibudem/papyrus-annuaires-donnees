@@ -625,7 +625,46 @@ CORRESPONDANCE_FONCTIONS = {
 }
 
 
+# Titres de rang (fonctions Synchro) : un seul à la fois sur une fiche. Quand
+# la Synchro donne un de ces titres, il REMPLACE le titre de rang déjà sur la
+# fiche (ex. promotion agrégé -> titulaire) ; les titres saisis à la main (hors
+# de cette liste) sont gardés. Un titre Synchro hors liste (ex. Vice-doyen.ne)
+# suit la logique d'origine : il remplace le premier titre de la fiche.
+FONCTIONS_DE_RANG = [
+    "Prof agrégé(e) PTG SC Acad.",
+    "Prof agrégé(e) PTG SC Recherc.",
+    "Prof titulaire PTG SC Acad.",
+    "Prof. sous octroi titulaire",
+    "Professeur associé",
+    "Professeur form. prat. titulai",
+    "Professeur sous octroi adjoint",
+    "Professeur(e) adjoint(e)",
+    "Professeur(e) agrégé(e)",
+    "Professeur(e) form.prat agrég.",
+    "Professeur(e) sous oct. agrég.",
+    "Professeur(e) titulaire",
+    "Professeur/ chercheur adjoint",
+    "Professeur/ chercheur agrégé",
+    "Professeur/chercheur titulaire",
+]
+# Formes reconnues sur une fiche comme « titre de rang » : la forme Papyrus,
+# mais aussi les formes écrites par d'anciennes versions du script (titre
+# Synchro brut, ou avec seulement « (e) » -> « .e »), pour les remplacer aussi.
+TITRES_DE_RANG = ({CORRESPONDANCE_FONCTIONS[f] for f in FONCTIONS_DE_RANG}
+                  | set(FONCTIONS_DE_RANG)
+                  | {f.replace("(e)", ".e") for f in FONCTIONS_DE_RANG})
+
+
 _fonctions_inconnues = set()  # pour ne signaler chaque fonction inconnue qu'une fois
+
+# Rapport des changements de titre (CHAMP_FONCTION) du run, affiché dans le
+# résumé : (action, ancien, nouveau) -> nombre de fiches.
+RAPPORT_TITRES = {}
+DESCRIPTION_CHANGEMENT_TITRE = {
+    "remplace": lambda ancien, nouveau: f"remplacé : '{ancien}' -> '{nouveau}'",
+    "ajoute": lambda ancien, nouveau: f"ajouté : '{nouveau}'",
+    "retire": lambda ancien, nouveau: f"de rang périmé retiré : '{ancien}'",
+}
 
 
 def formater_fonction(statut):
@@ -682,14 +721,65 @@ def operation_retrait_champ(item_existant, champ):
     return None
 
 
+def operations_fonction(item_existant, titre):
+    """Opérations JSON Patch pour CHAMP_FONCTION (voir TITRES_DE_RANG) :
+    - titre hors liste -> logique d'origine : remplace le premier titre de la
+      fiche s'il est différent (ou l'ajoute si le champ est vide) ;
+    - titre de rang déjà sur la fiche -> rien (sauf d'autres titres de rang
+      périmés, retirés) ;
+    - titre de rang nouveau -> remplace le(s) titre(s) de rang de la fiche ;
+      s'il n'y en a pas, il est ajouté à la suite. Les titres hors liste
+      (saisis à la main) sont toujours gardés.
+    Retourne (operations, changements) ; changements liste les modifications
+    pour le rapport du journal : ("remplace", ancien, titre), ("ajoute", None,
+    titre) ou ("retire", ancien, None)."""
+    if not titre:
+        return [], []
+    valeurs = [v.get("value", "") for v in item_existant.get("metadata", {}).get(CHAMP_FONCTION, [])]
+
+    if titre not in TITRES_DE_RANG:
+        # Titre hors liste (ex. Vice-doyen.ne) : logique d'origine, le premier
+        # titre de la fiche est remplacé s'il est différent.
+        operation = operation_maj_champ(item_existant, CHAMP_FONCTION, titre)
+        if not operation:
+            return [], []
+        changement = ("remplace", valeurs[0], titre) if valeurs else ("ajoute", None, titre)
+        return [operation], [changement]
+
+    chemin = f"/metadata/{CHAMP_FONCTION}"
+    perimes = [i for i, v in enumerate(valeurs) if v in TITRES_DE_RANG and v != titre]
+
+    operations = []
+    changements = []
+    if titre not in valeurs:
+        if perimes:
+            # Le premier titre de rang périmé est remplacé sur place (sa
+            # position est gardée) ; les autres sont retirés ci-dessous.
+            i = perimes.pop(0)
+            operations.append({"op": "replace", "path": f"{chemin}/{i}", "value": {"value": titre}})
+            changements.append(("remplace", valeurs[i], titre))
+        elif valeurs:
+            operations.append({"op": "add", "path": f"{chemin}/-", "value": {"value": titre}})
+            changements.append(("ajoute", None, titre))
+        else:
+            operations.append({"op": "add", "path": chemin, "value": [{"value": titre}]})
+            changements.append(("ajoute", None, titre))
+    # Retraits du plus grand indice au plus petit : chaque retrait décale les
+    # valeurs qui suivent, pas celles qui précèdent.
+    for i in sorted(perimes, reverse=True):
+        operations.append({"op": "remove", "path": f"{chemin}/{i}"})
+        changements.append(("retire", valeurs[i], None))
+    return operations, changements
+
+
 def operations_maj_personne(item_existant, nom, prenom, statut, orcid):
     """Liste toutes les opérations JSON Patch nécessaires pour mettre à jour
     un item Person existant (seuls les champs différents génèrent une opération).
-    La relation OrgUnit n'est PAS gérée ici, voir lier_orgunit."""
+    La relation OrgUnit n'est PAS gérée ici, voir lier_orgunit. Retourne
+    (operations, changements_titre), voir operations_fonction."""
     champs_a_verifier = [
         (CHAMP_NOM, nom),
         (CHAMP_PRENOM, prenom),
-        (CHAMP_FONCTION, formater_fonction(statut)),
         (CHAMP_ORCID, orcid),
         (CHAMP_STATUT, VALEUR_STATUT_ACTIF),  # présent dans le fichier -> toujours Actif
     ]
@@ -700,11 +790,13 @@ def operations_maj_personne(item_existant, nom, prenom, statut, orcid):
         operation = operation_maj_champ(item_existant, champ, valeur)
         if operation:
             operations.append(operation)
+    operations_titre, changements_titre = operations_fonction(item_existant, formater_fonction(statut))
+    operations += operations_titre
     # Le CodeUnite n'est plus porté par les fiches Person : on retire l'ancien.
     retrait = operation_retrait_champ(item_existant, CHAMP_CODEUNITE)
     if retrait:
         operations.append(retrait)
-    return operations
+    return operations, changements_titre
 
 
 def retirer_anciennes_unites(client, person_uuid, orgunit_uuid, relations, appliquer):
@@ -891,11 +983,17 @@ def synchroniser_professeur(client, collection_uuid, professeur, orcid, applique
                 lien_echoue = True
         return "cree", lien_echoue, orgunit_introuvable, 0
 
-    operations = operations_maj_personne(item_existant, nom, prenom, statut, orcid)
+    operations, changements_titre = operations_maj_personne(item_existant, nom, prenom, statut, orcid)
     if operations:
         LOG.debug(f"[MISE À JOUR] {nom}, {prenom} <{courriel}> — {len(operations)} champ(s) à modifier")
+        for action, ancien, nouveau in changements_titre:
+            LOG.debug(f"  ↳ titre {DESCRIPTION_CHANGEMENT_TITRE[action](ancien, nouveau)}")
         if appliquer:
             client.mettre_a_jour_personne(item_existant["uuid"], operations)
+        # Compté seulement si le PATCH a réussi (ou en simulation) : une erreur
+        # lève une exception avant d'arriver ici.
+        for changement in changements_titre:
+            RAPPORT_TITRES[changement] = RAPPORT_TITRES.get(changement, 0) + 1
 
     resultat = "maj" if operations else "inchange"
 
@@ -1024,6 +1122,20 @@ def verifier_fraicheur(chemin, age_max_jours, description):
                      f"(maximum {age_max_jours}) — export non reçu ?")
         return True
     return False
+
+
+def afficher_rapport_titres(appliquer):
+    """Résume les changements de titre (CHAMP_FONCTION) du run, regroupés par
+    changement, du plus fréquent au plus rare. Le détail par prof est dans le .log."""
+    if not RAPPORT_TITRES:
+        return
+    total = {action: sum(n for (a, _, _), n in RAPPORT_TITRES.items() if a == action)
+             for action in DESCRIPTION_CHANGEMENT_TITRE}
+    verbe = "" if appliquer else " (à faire)"
+    LOG.info(f"  Titres ({CHAMP_FONCTION}){verbe} : {total['remplace']} remplacé(s), "
+              f"{total['ajoute']} ajouté(s), {total['retire']} titre(s) de rang périmé(s) retiré(s)")
+    for (action, ancien, nouveau), n in sorted(RAPPORT_TITRES.items(), key=lambda e: -e[1]):
+        LOG.info(f"    {n:>4} × {DESCRIPTION_CHANGEMENT_TITRE[action](ancien, nouveau)}")
 
 
 def executer(args):
@@ -1174,6 +1286,7 @@ def executer(args):
         codes = sorted(code for code, trouve in client._cache_orgunits.items() if trouve is None)
         LOG.info(f"  {compteurs['orgunit_introuvable']} prof(s) non relié(s) à une unité : aucune OrgUnit "
                   f"dans DSpace pour {len(codes)} CodeUnite ({', '.join(codes)})")
+    afficher_rapport_titres(args.apply)
     if not args.apply:
         if compteurs["cree"] >= SEUIL_MAX_CREATIONS and not args.ignorer_seuils:
             LOG.warning(f"  ⚠ {compteurs['cree']} création(s) prévue(s) : en mode --apply, le garde-fou "
