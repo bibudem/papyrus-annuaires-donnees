@@ -26,6 +26,7 @@ Organisation des fichiers :
 papyrus-annuaires-donnees/
 ├── synchro_profs_papyrus.py
 ├── enrichir_orcid_papyrus.py
+├── photos_papyrus.py
 ├── .env.example   # modèle pour créer votre .env
 ├── outils/
 │   └── extraire_professeurs.py
@@ -248,6 +249,47 @@ dans un autre profil : l'ORCID de ces fiches est à vérifier.
 Facultatif : avec des identifiants « Public API » ORCID dans le `.env`
 (`ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET`), le script s'authentifie et a des
 limites d'appel plus généreuses. Sans eux, l'accès anonyme suffit.
+
+---
+
+## 4. `photos_papyrus.py` — photos des fiches
+
+Ce script met la photo officielle de chaque chercheur sur sa fiche Person,
+à partir de l'archive `data/chercheurs.zip` (pas besoin de la décompresser) :
+
+```
+chercheurs/<codesim>/info.txt                   nom, prenom, courriel, codesim, idsadvr
+chercheurs/<codesim>/photoOfficielle.jpg        la photo envoyée dans Papyrus
+chercheurs/<codesim>/photoOfficiellePetite.jpg  ignorée (trop petite)
+```
+
+- Le dossier est rattaché à la fiche **par le courriel** de `info.txt`. Sans
+  courriel, ou si aucune fiche n'a ce courriel, le dossier est sauté. Le
+  résumé liste les dossiers sans courriel et ceux dont **le courriel diffère
+  de celui de la fiche au même nom** (photo non mise, courriel à corriger) ;
+  pour les chercheurs qui n'ont pas de fiche dans Papyrus, il ne donne que le total.
+- Un dossier **sans courriel** est détaillé dans le résumé seulement si une
+  fiche Papyrus porte le même nom (son courriel est affiché, pour compléter
+  `info.txt`). Sinon, le résumé ne donne que le total.
+- **Pas de photo** sur la fiche : elle est ajoutée. **Même photo** : rien n'est
+  envoyé. **Autre image** (ancienne photo, ou image ajoutée à la main) : elle
+  est remplacée par la photo officielle.
+- La photo va dans le bundle `ORIGINAL`, avec une copie dans `THUMBNAIL` : elle
+  s'affiche tout de suite, sans attendre la tâche DSpace `filter-media`. La
+  nouvelle photo est envoyée avant de retirer l'ancienne.
+- Les fiches `Inactif` sont sautées, sauf avec `--inclure-inactifs`. Un nom ou
+  prénom différent de `info.txt` est signalé, sans bloquer.
+
+```bash
+python photos_papyrus.py                       # simulation
+python photos_papyrus.py --apply --limit 1     # essai réel sur 1 fiche
+python photos_papyrus.py --apply
+```
+
+L'archive se règle dans le `.env` (`FICHIER_PHOTOS`, motif `*` accepté, la plus
+récente est prise) ou se donne dans la commande. Mêmes options, même `.env` et
+même verrou que les autres scripts. Le premier run, qui ajoute presque toutes
+les photos, prend 20 à 30 minutes ; les suivants, quelques minutes.
 
 ---
 
