@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Met à jour la photo des fiches Person de Papyrus (DSpace 7) à partir de
+Met à jour la photo des fiches Person de Papyrus (DSpace 9+) à partir de
 l'archive des chercheurs (data/chercheurs.zip) :
 
     chercheurs/<codesim>/info.txt                   nom, prenom, courriel, codesim, idsadvr
@@ -28,6 +28,7 @@ synchro_profs_papyrus.py (les scripts ne peuvent donc pas écrire en même temps
 """
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -68,7 +69,7 @@ from synchro_profs_papyrus import (
     resoudre_fichier_entree,
 )
 # Importé après synchro_profs_papyrus, qui ajoute outils/ au chemin des modules.
-from extraire_professeurs import normaliser_courriel
+from extraire_professeurs import CSV_ENCODAGE, CSV_SEPARATEUR, normaliser_courriel
 
 # =============================================================================
 # CONFIGURATION
@@ -120,6 +121,7 @@ class Dossier:
     nom: str
     prenom: str
     courriel: str          # normalisé, '' si absent de info.txt
+    idsadvr: str
     chemin_photo: str      # chemin dans l'archive, '' si la photo manque
 
     def decrire(self, item=None):
@@ -152,6 +154,7 @@ def lire_archive(archive):
             nom=info.get("nom", ""),
             prenom=info.get("prenom", ""),
             courriel=normaliser_courriel(info.get("courriel") or ""),
+            idsadvr=info.get("idsadvr", ""),
             chemin_photo=chemin_photo if chemin_photo in noms else "",
         ))
     return dossiers
@@ -221,32 +224,38 @@ def nom_different(item, dossier):
 def apparier(dossiers, par_courriel, par_nom, inclure_inactifs):
     """Rattache chaque dossier à sa fiche par le courriel. Retourne
     (a_traiter, sautes) : a_traiter liste les (dossier, fiche) ; sautes
-    associe chaque motif de MOTIFS_SAUT aux lignes de rapport concernées.
+    associe chaque motif de MOTIFS_SAUT à ses (dossier, ligne de rapport).
     Le nom ne sert jamais à rattacher, seulement à signaler une incohérence."""
+    # Une fiche déjà rattachée par le courriel d'un autre dossier a sa photo :
+    # un homonyme (ex. deux « Lavoie, Marc ») ne doit pas être signalé contre elle.
+    deja_rattachees = {item["uuid"] for d in dossiers if d.courriel
+                       for item in par_courriel.get(d.courriel, [])}
     a_traiter = []
     sautes = {motif: [] for motif in MOTIFS_SAUT}
     for dossier in dossiers:
         fiches = par_courriel.get(dossier.courriel, []) if dossier.courriel else []
-        homonymes = par_nom.get(cle_nom(dossier.nom, dossier.prenom), [])
+        homonymes = [item for item in par_nom.get(cle_nom(dossier.nom, dossier.prenom), [])
+                     if item["uuid"] not in deja_rattachees]
         if not dossier.courriel:
             if homonymes:
                 fiches_trouvees = " | ".join(decrire_fiche(item) for item in homonymes)
-                sautes["sans_courriel_fiche"].append(f"{dossier.decrire()} — fiche(s) au même nom : {fiches_trouvees}")
+                sautes["sans_courriel_fiche"].append(
+                    (dossier, f"{dossier.decrire()} — fiche(s) au même nom : {fiches_trouvees}"))
             else:
-                sautes["sans_courriel"].append(dossier.decrire())
+                sautes["sans_courriel"].append((dossier, dossier.decrire()))
         elif not dossier.chemin_photo:
-            sautes["sans_photo"].append(dossier.decrire())
+            sautes["sans_photo"].append((dossier, dossier.decrire()))
         elif not fiches:
             courriels = sorted({c for item in homonymes for c in valeurs_du_champ(item, CHAMP_COURRIEL)})
             if courriels:
                 sautes["courriel_incoherent"].append(
-                    f"{dossier.decrire()} — courriel de la fiche : {', '.join(courriels)}")
+                    (dossier, f"{dossier.decrire()} — courriel de la fiche : {', '.join(courriels)}"))
             else:
-                sautes["fiche_introuvable"].append(dossier.decrire())
+                sautes["fiche_introuvable"].append((dossier, dossier.decrire()))
         elif len(fiches) > 1:
-            sautes["plusieurs_fiches"].append(dossier.decrire())
+            sautes["plusieurs_fiches"].append((dossier, dossier.decrire()))
         elif not inclure_inactifs and VALEUR_STATUT_INACTIF in valeurs_du_champ(fiches[0], CHAMP_STATUT):
-            sautes["inactif"].append(dossier.decrire(fiches[0]))
+            sautes["inactif"].append((dossier, dossier.decrire(fiches[0])))
         else:
             a_traiter.append((dossier, fiches[0]))
     return a_traiter, sautes
@@ -357,7 +366,7 @@ def afficher_resume(compteurs, sautes, noms_differents, appliquer):
             continue
         LOG.info(f"  {len(lignes)} {libelle}")
         if affichage != "total":
-            for ligne in lignes:
+            for _, ligne in lignes:
                 LOG.info(f"    {ligne}")
     if noms_differents:
         LOG.info(f"  {len(noms_differents)} fiche(s) au nom ou prénom différent de info.txt "
@@ -381,6 +390,16 @@ def afficher_bilan(compteurs, nb_dossiers, nb_rattaches, nb_fiches, appliquer, l
         avec_photo = compteurs["a_jour"] + (nb_maj if appliquer else 0)
         LOG.info(f"        {avec_photo} fiche(s) sur {nb_fiches} dans la collection ont la photo officielle"
                  f"{'' if appliquer else ' (avant application)'}.")
+
+
+def extraire_sans_fiche(dossiers):
+    """Écrit les dossiers sans fiche dans Papyrus dans un CSV horodaté (logs/)."""
+    chemin = os.path.join(DOSSIER_LOGS, f"photos_sans_fiche_{datetime.now():%Y%m%d_%H%M%S}.csv")
+    with open(chemin, "w", newline="", encoding=CSV_ENCODAGE) as f:
+        writer = csv.writer(f, delimiter=CSV_SEPARATEUR)
+        writer.writerow(["codesim", "nom", "prenom", "courriel", "idsadvr"])
+        writer.writerows([d.code, d.nom, d.prenom, d.courriel, d.idsadvr] for d in dossiers)
+    LOG.info(f"Extrait des {len(dossiers)} dossier(s) sans fiche dans Papyrus : {chemin}")
 
 
 # =============================================================================
@@ -409,6 +428,9 @@ def analyser_arguments():
     parser.add_argument("--inclure-inactifs", action="store_true",
                         help=f"Traite aussi les fiches {CHAMP_STATUT} = {VALEUR_STATUT_INACTIF} "
                              f"(sautées par défaut)")
+    parser.add_argument("--csv-logs", action="store_true",
+                        help="Écrit aussi les dossiers sans fiche dans Papyrus dans "
+                             "logs/photos_sans_fiche_<date>.csv (codesim, nom, prénom, courriel, idsadvr)")
     parser.add_argument("--log-file", metavar="FICHIER.log",
                         help="Chemin du fichier de journal (par défaut : horodaté, dans logs/)")
     parser.add_argument("--verbose", action="store_true",
@@ -488,6 +510,8 @@ def executer(args):
                 arret_erreurs = True
                 break
 
+    if args.csv_logs:
+        extraire_sans_fiche([dossier for dossier, _ in sautes["fiche_introuvable"]])
     afficher_resume(compteurs, sautes, noms_differents, args.apply)
     afficher_bilan(compteurs, len(dossiers), nb_rattaches, len(items), args.apply, args.limit)
 

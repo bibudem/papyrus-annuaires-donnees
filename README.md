@@ -271,6 +271,9 @@ chercheurs/<codesim>/photoOfficiellePetite.jpg  ignorée (trop petite)
 - Un dossier **sans courriel** est détaillé dans le résumé seulement si une
   fiche Papyrus porte le même nom (son courriel est affiché, pour compléter
   `info.txt`). Sinon, le résumé ne donne que le total.
+- Avec `--csv-logs`, les dossiers **sans fiche dans Papyrus** sont aussi écrits
+  dans `logs/photos_sans_fiche_<date>.csv` (codesim, nom, prénom, courriel,
+  idsadvr), à ouvrir dans Excel : `python photos_papyrus.py --apply --csv-logs`.
 - **Pas de photo** sur la fiche : elle est ajoutée. **Même photo** : rien n'est
   envoyé. **Autre image** (ancienne photo, ou image ajoutée à la main) : elle
   est remplacée par la photo officielle.
